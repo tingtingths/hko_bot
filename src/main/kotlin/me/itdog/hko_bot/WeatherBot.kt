@@ -15,8 +15,8 @@ import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.inlinequery.inputmessagecontent.InputTextMessageContent
 import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultArticle
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
 import org.telegram.telegrambots.meta.generics.TelegramBot
+import java.io.Serializable
 import java.util.concurrent.TimeUnit
 
 class WeatherBotBuilder {
@@ -80,26 +80,33 @@ open class WeatherBot {
                 api.getWarningInfo(isEnglish = Cache.KEY_WARNING_INFO_ENG == key)
             }
         })
-
-    private val callbackQueryPage: QueryOption
+    private val buttons = mutableListOf<QueryButton>()
+    private val mainPage: QueryPage
 
     init {
-        val p2o1 = QueryOption(InlineKeyboardButton("p2o1").apply {callbackData = "p2o1" }).apply {
-
-        }
-        val p2o2 = QueryOption(InlineKeyboardButton("p2o2").apply { callbackData = "p2o2" })
-        val p2o3 = QueryOption(InlineKeyboardButton("p2o3").apply { callbackData = "p2o3" })
-
-        val p1o1 = QueryOption(InlineKeyboardButton("p1o1").apply { callbackData = "p1o1" }).apply {
-            this.nextPageFunc = {
-                QueryOption.Companion.QueryOptionPageBuilder().apply {
-                    addRow().addOption(p2o1).addOption(p2o2)
-                    addRow().addOption(p2o3)
-                }.build()
+        // build buttons
+        buttons.add(QueryButton("p3o1", "p3o1").apply {
+            buildMessage = {
+                "This is a custom message for ${keyboardButton.callbackData}"
             }
-        }
+        })
+        buttons.add(QueryButton("p3o2", "p3o2"))
+        buttons.add(QueryButton("p2o1", "p2o1"))
+        buttons.add(QueryButton("p2o2", "p2o2"))
+        buttons.add(QueryButton("p2o3", "p2o3"))
+        buttons.add(QueryButton("p1o1", "p1o1"))
 
-        callbackQueryPage = QueryOption { listOf(listOf(p1o1)) }
+        // setup page flow
+        mainPage = QueryPage("p1o1")
+            .addItems(
+                QueryPage("p2o1")
+                    .addItems(
+                        "p3o1",
+                        "p3o2",
+                    ),
+                QueryPage("p2o2"),
+                QueryPage("p2o3"),
+            )
     }
 
     fun handleInlineQuery(update: Update): AnswerInlineQuery {
@@ -120,38 +127,32 @@ open class WeatherBot {
 
     fun handleMessage(update: Update): BotApiMethod<Message> {
         val message = update.message
+        val chatId = message.chatId.toString()
         val text = message.text
         logger.debug("[@${message.chat.userName}] Message: ${text}")
 
         if (text == "/more") {
-            val reply = SendMessage()
-            reply.chatId = message.chatId.toString()
+            // reset user state
+            val traveller = QueryGraphTraveller(mainPage, buttons)
+            val reply = traveller
+                .goHome()
+                .replyNew(update)
             reply.replyToMessageId = message.messageId
-            reply.text = "What do you want to know?"
-            reply.replyMarkup = callbackQueryPage.nextPageReplyMarkup()
             return reply
         } else {
             val reply = SendMessage()
-            reply.chatId = message.chatId.toString()
+            reply.chatId = chatId
             reply.replyToMessageId = message.messageId
             reply.text = "Echo \"${text}\""
             return reply
         }
     }
 
-    fun handleCallbackQuery(update: Update): BotApiMethod<Message> {
+    fun handleCallbackQuery(update: Update): BotApiMethod<Serializable> {
+        val traveller = QueryGraphTraveller(mainPage, buttons)
         val callbackData = update.callbackQuery.data
-        val found = callbackQueryPage.findPage(callbackData)
-        logger.debug("handleCallbackQuery(); found=${found?.keyboardButton?.text}")
-        return if (found != null) {
-            found.responseFunc.invoke(update)
-        } else {
-            logger.warn("Cannot find page with callback data, $callbackData")
-            val reply = SendMessage()
-            reply.chatId = update.callbackQuery.message.chatId.toString()
-            reply.text = "Cannot find page with callback data, $callbackData"
-            reply
-        }
+        traveller.travelTo(callbackData)
+        return traveller.refresh(update)
     }
 }
 

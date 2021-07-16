@@ -1,9 +1,11 @@
 package me.itdog.hko_bot
 
 import org.apache.commons.cli.*
+import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 import kotlin.system.exitProcess
+
 
 fun main(args: Array<String>) {
     Application(args).start()
@@ -13,6 +15,7 @@ class Application(args: Array<String>) {
 
     private var token: String
     private var username: String
+    private val logger = LoggerFactory.getLogger("")
 
     init {
         val parser: CommandLineParser = DefaultParser()
@@ -77,5 +80,6 @@ class Application(args: Array<String>) {
                 .username(username)
                 .buildPollingBot()
         )
+        logger.info("Bot Started...")
     }
 }

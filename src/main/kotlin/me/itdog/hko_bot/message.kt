@@ -1,94 +1,156 @@
 package me.itdog.hko_bot
 
-import org.telegram.telegrambots.meta.api.methods.BotApiMethod
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
-import org.telegram.telegrambots.meta.api.objects.Message
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
+import java.util.function.Function
 import java.util.stream.Collectors
 
-class QueryOption {
+class QueryGraphTraveller(private val root: QueryPage) {
 
-    var keyboardButton: InlineKeyboardButton? = null
-    var nextPageFunc: () -> List<List<QueryOption>>
-    var responseFunc: ((Update) -> BotApiMethod<Message>) = { defaultNextPageResponse(it) }
+    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private lateinit var buttons: MutableMap<String, QueryButton>
+    private var currentPage = root
+    private val BACK_BTN_CALLBACK_DATA_PREFIX = "__back__:"
 
-    constructor(keyboardButton: InlineKeyboardButton) {
-        this.keyboardButton = keyboardButton
-        nextPageFunc = {
-            emptyList()
+    constructor(graph: QueryPage, buttons: List<QueryButton>) : this(graph) {
+        this.buttons = buttons.stream()
+            .collect(
+                Collectors.toMap(
+                    { it.keyboardButton.callbackData },
+                    Function.identity()
+                )
+            )
+    }
+
+    fun goHome(): QueryGraphTraveller {
+        currentPage = root
+        return this
+    }
+
+    fun travelTo(callbackData: String): Boolean {
+        logger.debug("${currentPage.buttonData} -> ${callbackData}...")
+        val found = if (callbackData.startsWith(BACK_BTN_CALLBACK_DATA_PREFIX)) {
+            // go back
+            val actualData = callbackData.substring(BACK_BTN_CALLBACK_DATA_PREFIX.length, callbackData.length)
+            val r = findPage(actualData)
+            r ?: root
+        } else {
+            findPage(callbackData) ?: return false
         }
+        currentPage = found
+        logger.debug("Arrived at ${currentPage.buttonData}")
+        return true
     }
 
-    constructor(nextOptionFunc: () -> List<List<QueryOption>>) {
-        this.nextPageFunc = nextOptionFunc
+    fun replyNew(update: Update): SendMessage {
+        val reply = SendMessage()
+        val button = findButton(currentPage.buttonData)
+        reply.chatId = update.message.chatId.toString()
+        reply.text = button.buildMessage.invoke(update)
+
+        if (currentPage.layout.isNotEmpty()) {
+            val markupButtons = currentPage.layout
+                .map { it.buttonData }
+                .map { findButton(it) }
+                .map { listOf(it.keyboardButton) }
+            reply.replyMarkup = InlineKeyboardMarkup(markupButtons)
+        }
+
+        return reply
     }
 
-    constructor(
-        keyboardButton: InlineKeyboardButton,
-        nextOptionFunc: () -> List<List<QueryOption>>,
-        responseFunc: (Update) -> BotApiMethod<Message>
-    ) {
-        this.keyboardButton = keyboardButton
-        this.nextPageFunc = nextOptionFunc
-        this.responseFunc = responseFunc
+    fun refresh(update: Update): EditMessageText {
+        val reply = EditMessageText()
+        val button = findButton(currentPage.buttonData)
+        val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
+        reply.chatId = update.callbackQuery.message.chatId.toString()
+        reply.messageId = update.callbackQuery.message.messageId
+        reply.text = button.buildMessage.invoke(update)
+
+        // has declared buttons
+        if (currentPage.layout.isNotEmpty()) {
+            currentPage.layout
+                .map { it.buttonData }
+                .map { findButton(it) }
+                .map { listOf(it.keyboardButton) }
+                .toCollection(markupButtons)
+        }
+        // add back button if not at home
+        val parent = findParent(currentPage.buttonData, root)
+        if (parent != null) {
+            // append go back button
+            val backBtnData = BACK_BTN_CALLBACK_DATA_PREFIX + parent.buttonData
+            markupButtons.add(listOf(InlineKeyboardButton("\u00AB Back").apply {
+                callbackData = backBtnData
+            }))
+        }
+        if (markupButtons.isNotEmpty()) {
+            reply.replyMarkup = InlineKeyboardMarkup(markupButtons)
+        }
+
+        return reply
     }
 
-    fun findPage(callbackData: String): QueryOption? {
-        if (keyboardButton?.callbackData == callbackData) return this
-        val flattened = nextPageFunc.invoke().flatten()
-        var found =
-            flattened.find { keyboardButton?.callbackData == callbackData }
-        if (found != null) return found
-        flattened.forEach {
-            found = it.findPage(callbackData)
+    private fun findParent(callbackData: String, page: QueryPage = root): QueryPage? {
+        if (page.buttonData == callbackData) return null
+        if (page.layout.isEmpty()) return null
+        var found = page.layout.find { it.buttonData == callbackData }
+        if (found != null) {
+            return page
+        }
+        for (child in page.layout) {
+            found = findParent(callbackData, child)
             if (found != null) return found
         }
         return null
     }
 
-    fun nextPageReplyMarkup(): InlineKeyboardMarkup {
-        return InlineKeyboardMarkup().apply {
-            keyboard = nextPageFunc.invoke().map { row ->
-                row.stream().map {
-                    it.keyboardButton
-                }.collect(Collectors.toList())
-            }
+    private fun findPage(callbackData: String, page: QueryPage = root): QueryPage? {
+        if (page.buttonData == callbackData) return page
+        if (page.layout.isEmpty()) return null
+        for (child in page.layout) {
+            val found = findPage(callbackData, child)
+            if (found != null) return found
         }
+        return null
     }
 
-    fun defaultNextPageResponse(update: Update): SendMessage {
-        val reply = SendMessage()
-        reply.chatId = update.callbackQuery.message.chatId.toString()
-        reply.replyMarkup = nextPageReplyMarkup()
-        return reply
+    private fun findButton(callbackData: String): QueryButton {
+        return buttons[callbackData] ?: throw Exception("Unable to find button [${currentPage.buttonData}]???")
+    }
+}
+
+class QueryPage(val buttonData: String) {
+    val layout: MutableList<QueryPage> = mutableListOf()
+
+    fun addItems(vararg options: QueryPage): QueryPage {
+        layout.addAll(options)
+        return this
     }
 
-    companion object {
-        class QueryOptionPageBuilder {
+    fun addItems(vararg buttonData: String): QueryPage {
+        layout.addAll(buttonData.map { QueryPage(it) })
+        return this
+    }
+}
 
-            var page: MutableList<MutableList<QueryOption>> = ArrayList()
+class QueryButton {
 
-            fun addRow(): QueryOptionPageBuilder {
-                page.add(ArrayList())
-                return this
-            }
+    var keyboardButton: InlineKeyboardButton
+    var buildMessage: ((Update) -> String)
 
-            fun addRow(options: MutableList<QueryOption>): QueryOptionPageBuilder {
-                page.add(options)
-                return this
-            }
+    constructor(keyboardButton: InlineKeyboardButton) {
+        this.keyboardButton = keyboardButton
+        buildMessage = { "Default message for [${this.keyboardButton.callbackData}]" }
+    }
 
-            fun addOption(option: QueryOption): QueryOptionPageBuilder {
-                page.last().add(option)
-                return this
-            }
-
-            fun build(): MutableList<MutableList<QueryOption>> {
-                return page
-            }
-        }
-
+    constructor(buttonText: String, callbackData: String) {
+        this.keyboardButton = InlineKeyboardButton(buttonText).apply { this.callbackData = callbackData }
+        buildMessage = { "Default message for [${this.keyboardButton.callbackData}]" }
     }
 }
