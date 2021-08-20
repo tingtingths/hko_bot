@@ -2,6 +2,7 @@ package me.itdog.hko_bot
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText
 import org.telegram.telegrambots.meta.api.objects.Update
@@ -51,7 +52,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         val reply = SendMessage()
         val button = findButton(currentPage.buttonData)
         reply.chatId = update.message.chatId.toString()
-        reply.text = button.buildMessage.invoke(update)
+        reply.text = button.defaultMessage
 
         if (currentPage.layout.isNotEmpty()) {
             val markupButtons = currentPage.layout
@@ -64,14 +65,12 @@ class QueryGraphTraveller(private val root: QueryPage) {
         return reply
     }
 
-    fun refresh(update: Update): EditMessageText {
-        val reply = EditMessageText()
+    fun react(update: Update): List<BotApiMethod<*>> {
+        val messages = mutableListOf<BotApiMethod<*>>()
         val button = findButton(currentPage.buttonData)
-        val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
-        reply.chatId = update.callbackQuery.message.chatId.toString()
-        reply.messageId = update.callbackQuery.message.messageId
-        reply.text = button.buildMessage.invoke(update)
 
+        // build buttons
+        val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
         // has declared buttons
         if (currentPage.layout.isNotEmpty()) {
             currentPage.layout
@@ -89,11 +88,36 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 callbackData = backBtnData
             }))
         }
-        if (markupButtons.isNotEmpty()) {
-            reply.replyMarkup = InlineKeyboardMarkup(markupButtons)
+
+        val replyAction = button.buildMessage.invoke(update)
+        if (ReplyMode.NEW_MESSAGE == replyAction.first) {
+            val newMessage = SendMessage()
+            newMessage.chatId = update.callbackQuery.message.chatId.toString()
+            newMessage.text = replyAction.second
+            messages.add(newMessage)
+
+            // update existing callback query with new message
+            val editMessage = SendMessage()
+            editMessage.chatId = update.callbackQuery.message.chatId.toString()
+            editMessage.text = button.defaultMessage
+
+            if (markupButtons.isNotEmpty()) {
+                editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+            }
+            messages.add(editMessage)
+        } else {
+            val editMessage = EditMessageText()
+            editMessage.chatId = update.callbackQuery.message.chatId.toString()
+            editMessage.messageId = update.callbackQuery.message.messageId
+            editMessage.text = replyAction.second
+
+            if (markupButtons.isNotEmpty()) {
+                editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+            }
+            messages.add(editMessage)
         }
 
-        return reply
+        return messages
     }
 
     private fun findParent(callbackData: String, page: QueryPage = root): QueryPage? {
@@ -142,15 +166,22 @@ class QueryPage(val buttonData: String) {
 class QueryButton {
 
     var keyboardButton: InlineKeyboardButton
-    var buildMessage: ((Update) -> String)
+    var defaultMessage: String
+    var buildMessage: ((Update) -> Pair<ReplyMode, String>)
 
-    constructor(keyboardButton: InlineKeyboardButton) {
+    constructor(keyboardButton: InlineKeyboardButton, defaultMessage: String? = null) {
         this.keyboardButton = keyboardButton
-        buildMessage = { "Default message for [${this.keyboardButton.callbackData}]" }
+        this.defaultMessage = defaultMessage ?: "Default message for [${this.keyboardButton.callbackData}]"
+        buildMessage = { Pair(ReplyMode.UPDATE_QUERY, this.defaultMessage) }
     }
 
-    constructor(buttonText: String, callbackData: String) {
+    constructor(buttonText: String, callbackData: String, defaultMessage: String? = null) {
         this.keyboardButton = InlineKeyboardButton(buttonText).apply { this.callbackData = callbackData }
-        buildMessage = { "Default message for [${this.keyboardButton.callbackData}]" }
+        this.defaultMessage = defaultMessage ?: "Default message for [${this.keyboardButton.callbackData}]"
+        buildMessage = { Pair(ReplyMode.UPDATE_QUERY, this.defaultMessage) }
     }
+}
+
+enum class ReplyMode {
+    NEW_MESSAGE, UPDATE_QUERY
 }
