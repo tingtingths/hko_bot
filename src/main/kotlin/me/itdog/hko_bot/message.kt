@@ -18,8 +18,8 @@ class QueryGraphTraveller(private val root: QueryPage) {
     private var currentPage = root
     private val BACK_BTN_CALLBACK_DATA_PREFIX = "__back__:"
 
-    constructor(graph: QueryPage, buttons: List<QueryButton>) : this(graph) {
-        this.buttons = buttons.stream()
+    constructor(graph: QueryPage, queryButtons: List<QueryButton>) : this(graph) {
+        this.buttons = queryButtons.stream()
             .collect(
                 Collectors.toMap(
                     { it.keyboardButton.callbackData },
@@ -65,22 +65,19 @@ class QueryGraphTraveller(private val root: QueryPage) {
         return reply
     }
 
-    fun react(update: Update): List<BotApiMethod<*>> {
-        val messages = mutableListOf<BotApiMethod<*>>()
-        val button = findButton(currentPage.buttonData)
-
+    private fun buildMarkupButtons(page: QueryPage): List<List<InlineKeyboardButton>> {
         // build buttons
         val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
         // has declared buttons
-        if (currentPage.layout.isNotEmpty()) {
-            currentPage.layout
+        if (page.layout.isNotEmpty()) {
+            page.layout
                 .map { it.buttonData }
                 .map { findButton(it) }
                 .map { listOf(it.keyboardButton) }
                 .toCollection(markupButtons)
         }
         // add back button if not at home
-        val parent = findParent(currentPage.buttonData, root)
+        val parent = findParent(page.buttonData, root)
         if (parent != null) {
             // append go back button
             val backBtnData = BACK_BTN_CALLBACK_DATA_PREFIX + parent.buttonData
@@ -88,35 +85,56 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 callbackData = backBtnData
             }))
         }
+        return markupButtons
+    }
+
+    fun react(update: Update): List<BotApiMethod<*>> {
+        val messages = mutableListOf<BotApiMethod<*>>()
+        val button = findButton(currentPage.buttonData)
 
         val replyAction = button.buildMessage.invoke(update)
-        if (ReplyMode.NEW_MESSAGE == replyAction.first) {
-            val newMessage = SendMessage()
-            newMessage.chatId = update.callbackQuery.message.chatId.toString()
-            newMessage.text = replyAction.second
-            messages.add(newMessage)
-
-            // update existing callback query with new message
-            val editMessage = SendMessage()
-            editMessage.chatId = update.callbackQuery.message.chatId.toString()
-            editMessage.text = button.defaultMessage
-
-            if (markupButtons.isNotEmpty()) {
-                editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+        when {
+            ReplyMode.NEW_MESSAGE == replyAction.first -> {
+                messages.addAll(buildNewMessageReplies(currentPage, update, replyAction.second))
             }
-            messages.add(editMessage)
-        } else {
-            val editMessage = EditMessageText()
-            editMessage.chatId = update.callbackQuery.message.chatId.toString()
-            editMessage.messageId = update.callbackQuery.message.messageId
-            editMessage.text = replyAction.second
+            ReplyMode.UPDATE_QUERY == replyAction.first -> {
+                val editMessage = EditMessageText()
+                editMessage.chatId = update.callbackQuery.message.chatId.toString()
+                editMessage.messageId = update.callbackQuery.message.messageId
+                editMessage.text = replyAction.second
 
-            if (markupButtons.isNotEmpty()) {
-                editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+                val markupButtons = buildMarkupButtons(currentPage)
+                if (markupButtons.isNotEmpty()) {
+                    editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+                }
+                messages.add(editMessage)
             }
-            messages.add(editMessage)
+            ReplyMode.NEW_MESSAGE_AND_BACK == replyAction.first -> {
+                val page = findParent(currentPage.buttonData) ?: currentPage
+                messages.addAll(buildNewMessageReplies(page, update, replyAction.second))
+            }
         }
 
+        return messages
+    }
+
+    private fun buildNewMessageReplies(page: QueryPage, update: Update, message: String): List<BotApiMethod<*>> {
+        val messages = mutableListOf<BotApiMethod<*>>()
+        val newMessage = SendMessage()
+        newMessage.chatId = update.callbackQuery.message.chatId.toString()
+        newMessage.text = message
+        messages.add(newMessage)
+
+        // update existing callback query with new message
+        val editMessage = SendMessage()
+        editMessage.chatId = update.callbackQuery.message.chatId.toString()
+        editMessage.text = findButton(page.buttonData).defaultMessage
+
+        val markupButtons = buildMarkupButtons(page)
+        if (markupButtons.isNotEmpty()) {
+            editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
+        }
+        messages.add(editMessage)
         return messages
     }
 
@@ -183,5 +201,5 @@ class QueryButton {
 }
 
 enum class ReplyMode {
-    NEW_MESSAGE, UPDATE_QUERY
+    NEW_MESSAGE, NEW_MESSAGE_AND_BACK, UPDATE_QUERY
 }

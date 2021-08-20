@@ -88,7 +88,7 @@ open class WeatherBot {
         // build buttons
         buttons.add(QueryButton("天氣報告", "current_weather").apply {
             buildMessage = {
-                Pair(ReplyMode.NEW_MESSAGE, buildCurrentWeather(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo))
+                Pair(ReplyMode.NEW_MESSAGE_AND_BACK, buildCurrentWeather(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo))
             }
         })
         buttons.add(QueryButton("p3o2", "p3o2"))
