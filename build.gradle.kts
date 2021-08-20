@@ -22,6 +22,26 @@ dependencies {
     runtimeOnly("org.jetbrains.kotlin:kotlin-reflect")
 }
 
+tasks.jar {
+    manifest {
+        attributes(
+            "Main-Class" to "me.itdog.hko_bot.ApplicationKt"
+        )
+    }
+
+    eachFile {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
+    from(
+        configurations.compileClasspath.get().map {
+            if (it.isDirectory) it else zipTree(it)
+        }
+    )
+
+    exclude("META-INF/*.RSA", "META-INF/*.SF","META-INF/*.DSA")
+}
+
 tasks.test {
     useJUnitPlatform()
 }
