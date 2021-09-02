@@ -17,6 +17,9 @@ class Flw {
     @SerializedName("GeneralSituation")
     @Expose
     var generalSituation: Any? = null
+        get() {
+            return if (field == null) field else Util.htmlExtractText(field as String)
+        }
 
     @SerializedName("TCInfo")
     @Expose
@@ -33,6 +36,9 @@ class Flw {
     @SerializedName("ForecastDesc")
     @Expose
     var forecastDesc: String? = null
+        get() {
+            return if (field == null) field else Util.htmlExtractText(field as String)
+        }
 
     @SerializedName("OutlookTitle")
     @Expose
@@ -41,6 +47,9 @@ class Flw {
     @SerializedName("OutlookContent")
     @Expose
     var outlookContent: String? = null
+        get() {
+            return if (field == null) field else Util.htmlExtractText(field as String)
+        }
 
     @SerializedName("Icon1")
     @Expose

@@ -97,6 +97,9 @@ class QueryGraphTraveller(private val root: QueryPage) {
             ReplyMode.NEW_MESSAGE == replyAction.first -> {
                 messages.addAll(buildNewMessageReplies(currentPage, update, replyAction.second))
             }
+            ReplyMode.NEW_MESSAGE_MARKDOWN == replyAction.first -> {
+                messages.addAll(buildNewMessageReplies(currentPage, update, replyAction.second, parse_mode = "MarkdownV2"))
+            }
             ReplyMode.UPDATE_QUERY == replyAction.first -> {
                 val editMessage = EditMessageText()
                 editMessage.chatId = update.callbackQuery.message.chatId.toString()
@@ -113,16 +116,26 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 val page = findParent(currentPage.buttonData) ?: currentPage
                 messages.addAll(buildNewMessageReplies(page, update, replyAction.second))
             }
+            ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN == replyAction.first -> {
+                val page = findParent(currentPage.buttonData) ?: currentPage
+                messages.addAll(buildNewMessageReplies(page, update, replyAction.second, parse_mode = "MarkdownV2"))
+            }
         }
 
         return messages
     }
 
-    private fun buildNewMessageReplies(page: QueryPage, update: Update, message: String): List<BotApiMethod<*>> {
+    private fun buildNewMessageReplies(
+        page: QueryPage,
+        update: Update,
+        message: String,
+        parse_mode: String? = null
+    ): List<BotApiMethod<*>> {
         val messages = mutableListOf<BotApiMethod<*>>()
         val newMessage = SendMessage()
         newMessage.chatId = update.callbackQuery.message.chatId.toString()
         newMessage.text = message
+        if (parse_mode != null) newMessage.parseMode = parse_mode
         messages.add(newMessage)
 
         // update existing callback query with new message
@@ -201,5 +214,5 @@ class QueryButton {
 }
 
 enum class ReplyMode {
-    NEW_MESSAGE, NEW_MESSAGE_AND_BACK, UPDATE_QUERY
+    NEW_MESSAGE, NEW_MESSAGE_MARKDOWN, NEW_MESSAGE_AND_BACK, NEW_MESSAGE_AND_BACK_MARKDOWN, UPDATE_QUERY
 }

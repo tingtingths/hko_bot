@@ -8,8 +8,6 @@ import me.itdog.hko_bot.api.model.WeatherInfo
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
-import org.telegram.telegrambots.bots.TelegramWebhookBot
-import org.telegram.telegrambots.meta.api.interfaces.BotApiObject
 import org.telegram.telegrambots.meta.api.methods.AnswerInlineQuery
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.send.*
@@ -19,7 +17,6 @@ import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.inlinequery.inputmessagecontent.InputTextMessageContent
 import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultArticle
 import org.telegram.telegrambots.meta.generics.TelegramBot
-import java.io.Serializable
 import java.util.concurrent.TimeUnit
 
 class WeatherBotBuilder {
@@ -88,10 +85,20 @@ open class WeatherBot {
         // build buttons
         buttons.add(QueryButton("天氣報告", "current_weather").apply {
             buildMessage = {
-                Pair(ReplyMode.NEW_MESSAGE_AND_BACK, buildCurrentWeather(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo))
+                Pair(
+                    ReplyMode.NEW_MESSAGE_AND_BACK,
+                    buildCurrentWeatherMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
+                )
             }
         })
-        buttons.add(QueryButton("p3o2", "p3o2"))
+        buttons.add(QueryButton("天氣概況及預報", "general_weather").apply {
+            buildMessage = {
+                Pair(
+                    ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
+                    buildGeneralWeatherInfoMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
+                )
+            }
+        })
         buttons.add(QueryButton("p2o1", "p2o1"))
         buttons.add(QueryButton("p2o2", "p2o2"))
         buttons.add(QueryButton("p2o3", "p2o3"))
@@ -100,17 +107,14 @@ open class WeatherBot {
         // setup page flow
         mainPage = QueryPage("p1o1")
             .addItems(
-                QueryPage("p2o1")
-                    .addItems(
-                        "current_weather",
-                        "p3o2",
-                    ),
+                QueryPage("current_weather"),
+                QueryPage("general_weather"),
                 QueryPage("p2o2"),
                 QueryPage("p2o3"),
             )
     }
 
-    private fun buildCurrentWeather(info: WeatherInfo): String {
+    private fun buildCurrentWeatherMarkdown(info: WeatherInfo): String {
         return info.let {
             val obsTime = it.rhrread?.formattedObsTime
             val temperature = it.hko?.temperature
@@ -121,12 +125,22 @@ open class WeatherBot {
             val uvIntensity = it.rhrread?.intensity
 
             "觀測時間: ${obsTime}\n" +
-            "氣溫: ${temperature}°C\n" +
-            "最高氣溫: ${maxTemperature}°C\n" +
-            "最低氣溫: ${minTemperature}°C\n" +
-            "相對濕度: ${rh}%\n" +
-            "紫外線指數: ${uvIdx}\n" +
-            "紫外線強度: ${uvIntensity}"
+                    "氣溫: ${temperature}°C\n" +
+                    "最高氣溫: ${maxTemperature}°C\n" +
+                    "最低氣溫: ${minTemperature}°C\n" +
+                    "相對濕度: ${rh}%\n" +
+                    "紫外線指數: ${uvIdx}\n" +
+                    "紫外線強度: ${uvIntensity}"
+        }
+    }
+
+    private fun buildGeneralWeatherInfoMarkdown(info: WeatherInfo): String {
+        return info.let {
+            "${it.flw?.generalSituation}\n\n" +
+                    "__*${it.flw?.forecastPeriod}*__\n" +
+                    "${it.flw?.forecastDesc}\n\n" +
+                    "__*${it.flw?.outlookTitle}*__\n" +
+                    "${it.flw?.outlookContent}"
         }
     }
 
