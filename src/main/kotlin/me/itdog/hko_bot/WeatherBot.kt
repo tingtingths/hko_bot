@@ -4,6 +4,7 @@ import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import me.itdog.hko_bot.api.HongKongObservatory
+import me.itdog.hko_bot.api.model.Flw
 import me.itdog.hko_bot.api.model.WeatherInfo
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -17,6 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.inlinequery.inputmessagecontent.InputTextMessageContent
 import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultArticle
 import org.telegram.telegrambots.meta.generics.TelegramBot
+import java.text.SimpleDateFormat
 import java.util.concurrent.TimeUnit
 
 class WeatherBotBuilder {
@@ -56,6 +58,82 @@ class WeatherBotBuilder {
 
 open class WeatherBot {
 
+    class WeatherMessageComposer {
+
+        companion object {
+            private fun escapeMarkdown(message: String): String {
+                return message.replace("_", "\\_")
+                    .replace("*", "\\*")
+                    .replace("[", "\\[")
+                    .replace("]", "\\]")
+                    .replace("(", "\\(")
+                    .replace(")", "\\)")
+                    .replace("~", "\\~")
+                    .replace("`", "\\`")
+                    .replace(">", "\\>")
+                    .replace("#", "\\#")
+                    .replace("+", "\\+")
+                    .replace("-", "\\-")
+                    .replace("=", "\\=")
+                    .replace("|", "\\|")
+                    .replace("{", "\\{")
+                    .replace("}", "\\}")
+                    .replace(".", "\\.")
+                    .replace("!", "\\!")
+            }
+
+            fun formatFlwTime(flw: Flw): String {
+                var ret = ""
+
+                if (flw.bulletinDate != null) {
+                    val inputFormat = SimpleDateFormat("yyyyMMdd")
+                    val outputFormat = SimpleDateFormat("yyyy-MM-dd")
+                    ret += outputFormat.format(inputFormat.parse(flw.bulletinDate))
+                }
+                if (flw.bulletinTime != null) {
+                    val inputFormat = SimpleDateFormat("HHmm")
+                    val outputFormat = SimpleDateFormat("HH:mm")
+                    if (ret.isNotEmpty()) ret += " "
+                    ret += outputFormat.format(inputFormat.parse(flw.bulletinTime))
+                }
+
+                return ret
+            }
+
+            fun composeCurrentWeatherMarkdown(info: WeatherInfo): String {
+                return info.let {
+                    val obsTime = it.rhrread?.formattedObsTime
+                    val temperature = it.hko?.temperature
+                    val maxTemperature = it.hko?.homeMaxTemperature
+                    val minTemperature = it.hko?.homeMinTemperature
+                    val rh = it.hko?.rh
+                    val uvIdx = it.rhrread?.uVIndex
+                    val uvIntensity = it.rhrread?.intensity
+
+                    "觀測時間: ${obsTime}\n" +
+                            "氣溫: ${temperature}°C\n" +
+                            "最高氣溫: ${maxTemperature}°C\n" +
+                            "最低氣溫: ${minTemperature}°C\n" +
+                            "相對濕度: ${rh}%\n" +
+                            "紫外線指數: ${uvIdx}\n" +
+                            "紫外線強度: ${uvIntensity}"
+                }
+            }
+
+            fun composeGeneralWeatherInfoMarkdown(info: WeatherInfo): String {
+                return info.let {
+                    var ret = if (info.flw != null) "_${escapeMarkdown(formatFlwTime(info.flw!!))}_\n\n" else ""
+                    ret += "${escapeMarkdown(it.flw?.generalSituation as String)}\n\n" +
+                            "__*${escapeMarkdown(it.flw?.forecastPeriod as String)}*__\n" +
+                            "${escapeMarkdown(it.flw?.forecastDesc as String)}\n\n" +
+                            "__*${escapeMarkdown(it.flw?.outlookTitle as String)}*__\n" +
+                            "${escapeMarkdown(it.flw?.outlookContent as String)}"
+                    ret
+                }
+            }
+        }
+    }
+
     enum class Cache {
         KEY_GENERAL_INFO,
         KEY_GENERAL_INFO_ENG,
@@ -87,61 +165,35 @@ open class WeatherBot {
             buildMessage = {
                 Pair(
                     ReplyMode.NEW_MESSAGE_AND_BACK,
-                    buildCurrentWeatherMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
+                    WeatherMessageComposer.composeCurrentWeatherMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
                 )
             }
         })
-        buttons.add(QueryButton("天氣概況及預報", "general_weather").apply {
+        buttons.add(QueryButton("天氣概況", "general_weather").apply {
             buildMessage = {
                 Pair(
                     ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
-                    buildGeneralWeatherInfoMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
+                    WeatherMessageComposer.composeGeneralWeatherInfoMarkdown(cache.get(Cache.KEY_GENERAL_INFO) as WeatherInfo)
                 )
             }
         })
-        buttons.add(QueryButton("p2o1", "p2o1"))
-        buttons.add(QueryButton("p2o2", "p2o2"))
-        buttons.add(QueryButton("p2o3", "p2o3"))
-        buttons.add(QueryButton("p1o1", "p1o1"))
+        buttons.add(QueryButton("Info", "info").apply {
+            buildMessage = {
+                Pair(
+                    ReplyMode.UPDATE_QUERY,
+                    "Version 0.0.1"
+                )
+            }
+        })
+        buttons.add(QueryButton("", "landing", "HKO Weather"))
 
         // setup page flow
-        mainPage = QueryPage("p1o1")
+        mainPage = QueryPage("landing")
             .addItems(
                 QueryPage("current_weather"),
                 QueryPage("general_weather"),
-                QueryPage("p2o2"),
-                QueryPage("p2o3"),
+                QueryPage("info"),
             )
-    }
-
-    private fun buildCurrentWeatherMarkdown(info: WeatherInfo): String {
-        return info.let {
-            val obsTime = it.rhrread?.formattedObsTime
-            val temperature = it.hko?.temperature
-            val maxTemperature = it.hko?.homeMaxTemperature
-            val minTemperature = it.hko?.homeMinTemperature
-            val rh = it.hko?.rh
-            val uvIdx = it.rhrread?.uVIndex
-            val uvIntensity = it.rhrread?.intensity
-
-            "觀測時間: ${obsTime}\n" +
-                    "氣溫: ${temperature}°C\n" +
-                    "最高氣溫: ${maxTemperature}°C\n" +
-                    "最低氣溫: ${minTemperature}°C\n" +
-                    "相對濕度: ${rh}%\n" +
-                    "紫外線指數: ${uvIdx}\n" +
-                    "紫外線強度: ${uvIntensity}"
-        }
-    }
-
-    private fun buildGeneralWeatherInfoMarkdown(info: WeatherInfo): String {
-        return info.let {
-            "${it.flw?.generalSituation}\n\n" +
-                    "__*${it.flw?.forecastPeriod}*__\n" +
-                    "${it.flw?.forecastDesc}\n\n" +
-                    "__*${it.flw?.outlookTitle}*__\n" +
-                    "${it.flw?.outlookContent}"
-        }
     }
 
     fun handleInlineQuery(update: Update): AnswerInlineQuery {
