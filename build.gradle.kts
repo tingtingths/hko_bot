@@ -40,7 +40,7 @@ tasks.jar {
         }
     )
 
-    exclude("META-INF/*.RSA", "META-INF/*.SF","META-INF/*.DSA")
+    exclude("META-INF/*.RSA", "META-INF/*.SF", "META-INF/*.DSA")
 }
 
 tasks.test {

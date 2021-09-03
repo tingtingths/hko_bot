@@ -6,7 +6,6 @@ import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 import kotlin.system.exitProcess
 
-
 fun main(args: Array<String>) {
     Application(args).start()
 }
