@@ -111,7 +111,7 @@ open class WeatherBot {
                 val maxTemperature = it.hko?.homeMaxTemperature
                 val minTemperature = it.hko?.homeMinTemperature
                 val rh = it.hko?.rh
-                val uvIdx = it.rhrread?.uVIndex
+                val uvIdx = it.rhrread?.uVIndex?.trim('/')
                 val uvIntensity = it.rhrread?.intensity
 
                 "${localiser.get(Localiser.Message.OBSERVATION_TIME)}: ${obsTime}\n" +
@@ -119,8 +119,8 @@ open class WeatherBot {
                         "${localiser.get(Localiser.Message.MAX_TEMPERATURE)}: ${maxTemperature}°C\n" +
                         "${localiser.get(Localiser.Message.MIN_TEMPERATURE)}: ${minTemperature}°C\n" +
                         "${localiser.get(Localiser.Message.RELATIVE_HUMIDITY)}: ${rh}%\n" +
-                        "${localiser.get(Localiser.Message.UV_INDEX)}: ${uvIdx}\n" +
-                        "${localiser.get(Localiser.Message.UV_INTENSITY)}: $uvIntensity"
+                        (if (uvIdx != null && uvIdx.isNotEmpty()) "${localiser.get(Localiser.Message.UV_INDEX)}: $uvIdx\n" else "") +
+                        (if (uvIntensity != null && uvIntensity.isNotEmpty()) "${localiser.get(Localiser.Message.UV_INTENSITY)}: $uvIntensity" else "")
             }
         }
 
