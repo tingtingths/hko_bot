@@ -48,7 +48,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
     }
 
     fun travelTo(callbackData: String): Boolean {
-        logger.debug("${currentPage.buttonData} -> ${callbackData}...")
+        //logger.debug("${currentPage.buttonData} -> ${callbackData}...")
         val found = if (callbackData.startsWith(BACK_BTN_CALLBACK_DATA_PREFIX)) {
             // go back
             val actualData = callbackData.substring(BACK_BTN_CALLBACK_DATA_PREFIX.length, callbackData.length)
@@ -58,7 +58,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
             findPage(callbackData) ?: return false
         }
         currentPage = found
-        logger.debug("Arrived at ${currentPage.buttonData}")
+        //logger.debug("Arrived at ${currentPage.buttonData}")
         return true
     }
 

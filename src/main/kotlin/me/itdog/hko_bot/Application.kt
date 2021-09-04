@@ -1,19 +1,44 @@
 package me.itdog.hko_bot
 
+import com.google.common.cache.CacheBuilder
+import com.google.common.cache.CacheLoader
+import com.google.common.cache.LoadingCache
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
+import redis.clients.jedis.Jedis
+import java.lang.Exception
+import java.net.URI
+import java.net.URISyntaxException
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    Application(args).start()
+    Global.app = Application(args).also {
+        it.start()
+    }
+}
+
+class Global {
+    companion object {
+        lateinit var app: Application
+        lateinit var persistent: Persistent
+
+        // secondary cache for user settings
+        val userSettings: LoadingCache<Long, UserSettings> = CacheBuilder.newBuilder()
+            .expireAfterAccess(30, TimeUnit.SECONDS)
+            .build(CacheLoader.from { userId ->
+                persistent.getUserSettings(userId!!, UserSettings(BotLocale.EN_UK))
+            })
+    }
 }
 
 class Application(args: Array<String>) {
 
     private var token: String
     private var username: String
+    private var redis: Jedis
     private val logger = LoggerFactory.getLogger("")
 
     init {
@@ -43,7 +68,17 @@ class Application(args: Array<String>) {
                 .required()
                 .build()
         )
-        // TODO add webhook options
+        options.addOption(
+            Option.builder("r")
+                .longOpt("redis")
+                .argName("redis")
+                .type(String::class.java)
+                .numberOfArgs(1)
+                .desc("Redis connection")
+                .hasArg()
+                .required()
+                .build()
+        )
 
         // parse arguments
         cmdLn = try {
@@ -60,10 +95,17 @@ class Application(args: Array<String>) {
 
         token = cmdLn.getOptionValue("token")
         username = cmdLn.getOptionValue("username")
+        redis = Jedis(URI.create(cmdLn.getOptionValue("redis")))
+        Global.persistent = Persistent(redis)
     }
 
     private fun argumentsInvalidReason(cmdLine: CommandLine): String? {
-        return null
+        return try {
+            URI.create(cmdLine.getOptionValue("redis"))
+            null
+        } catch (e: Exception) {
+            "Unable to parse redis uri, ${e.cause}"
+        }
     }
 
     private fun printHelp(options: Options) {
