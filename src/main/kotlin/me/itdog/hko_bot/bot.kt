@@ -200,7 +200,7 @@ open class WeatherBot {
                 Pair(Message.LANG_ENG, "English"),
                 Pair(Message.NOTIFICATION_BTN, "Notification"),
                 Pair(Message.NINE_DAYS_FORECAST_BTN, "9-day Forecast"),
-                Pair(Message.NOTIFICATION_BTN, "Others"),
+                Pair(Message.OTHERS_BTN, "Others"),
             )
         }
 
