@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 import redis.clients.jedis.Jedis
+import redis.clients.jedis.JedisPool
+import redis.clients.jedis.JedisPoolConfig
 import java.lang.Exception
 import java.net.URI
 import java.net.URISyntaxException
@@ -38,7 +40,6 @@ class Application(args: Array<String>) {
 
     private var token: String
     private var username: String
-    private var redis: Jedis
     private val logger = LoggerFactory.getLogger("")
 
     init {
@@ -95,8 +96,7 @@ class Application(args: Array<String>) {
 
         token = cmdLn.getOptionValue("token")
         username = cmdLn.getOptionValue("username")
-        redis = Jedis(URI.create(cmdLn.getOptionValue("redis")))
-        Global.persistent = Persistent(redis)
+        Global.persistent = Persistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
     }
 
     private fun argumentsInvalidReason(cmdLine: CommandLine): String? {
