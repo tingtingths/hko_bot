@@ -1,8 +1,7 @@
 package me.itdog.hko_bot
 
 import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import redis.clients.jedis.Jedis
@@ -10,7 +9,11 @@ import redis.clients.jedis.JedisPool
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
+import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
+import kotlin.math.abs
 
 data class UserSettings(var botLocale: BotLocale)
 
@@ -23,6 +26,7 @@ interface KeyValuePersistent<K, V> {
 
 interface UserSettingsPersistent {
     fun getUserSettings(userId: Long, otherwise: UserSettings): UserSettings
+    fun getAllUsersSettings(): Map<Long, UserSettings>
     fun saveUserSettings(userId: Long, settings: UserSettings)
     fun saveUserSettings(userSettings: Map<Long, UserSettings>)
     fun close()
@@ -86,6 +90,23 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         }
     }
 
+    override fun getAllUsersSettings(): Map<Long, UserSettings> {
+        var ret: Map<Long, UserSettings>
+        with(borrowConnection()) {
+            // convert to list to maintain order
+            val allKeys = listOf(keys(CacheKeyPrefix.USER_SETTINGS.prefix + "??"))
+                .stream().toArray<String> { length -> arrayOfNulls(length) }
+            val settings = mget(*allKeys)
+            ret = allKeys.zip(settings) { k, v ->
+                Pair(v.toLong(), if (v != null) gson.fromJson(v, UserSettings::class.java) else null)
+            }.filter {
+                it.second != null
+            }.toMap() as Map<Long, UserSettings>
+            this
+        }.let { returnConnection(it) }
+        return ret
+    }
+
     override fun saveUserSettings(userId: Long, settings: UserSettings) {
         val json = gson.toJson(settings)
         set(CacheKeyPrefix.USER_SETTINGS.prefix + userId, json)
@@ -104,11 +125,13 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     }
 }
 
-class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, UserSettings>, UserSettingsPersistent {
+class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, UserSettings>, UserSettingsPersistent {
 
     private val gson = Gson()
-    private var jsonObject: JsonObject
+    private var userSettings: MutableMap<Long, UserSettings> = mutableMapOf()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private var outstandingChanges: AtomicInteger = AtomicInteger(0)
+    private var lastWrite = Instant.now()
 
     init {
         if (!file.exists()) {
@@ -120,58 +143,77 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, U
         }
         // read from file
         gson.newJsonReader(FileReader(file)).let { reader ->
-            jsonObject = try {
-                if (file.length() > 0) JsonParser.parseReader(reader).asJsonObject else JsonObject()
+            userSettings = try {
+                if (file.length() > 0)
+                    gson.fromJson(reader, object : TypeToken<Map<Long, UserSettings>>() {}.type)
+                else
+                    mutableMapOf()
             } catch (e: Exception) {
                 logger.warn("Unable to parse persistent file ${file.path}, back up current file...")
                 file.copyTo(
                     File(file.parent, "${file.name}.${System.currentTimeMillis()}")
                 )
-                JsonObject()
+                mutableMapOf()
             }
             reader.close()
         }
     }
 
-    override fun get(key: String): UserSettings? {
-        val value = jsonObject.get(key)
+    override fun get(key: Long): UserSettings? {
+        val value = userSettings[key]
         logger.debug("GET $key=$value")
-        return if (value == null || value.isJsonNull) null else gson.fromJson(value, UserSettings::class.java)
+        return value
     }
 
-    override fun set(key: String, value: UserSettings) {
+    override fun set(key: Long, value: UserSettings) {
         logger.debug("SET $key=$value")
-        jsonObject.add(key, gson.toJsonTree(value))
+        userSettings[key] = value
+        outstandingChanges.incrementAndGet()
         write()
     }
 
-    override fun del(key: String) {
+    override fun del(key: Long) {
         logger.debug("DEL $key")
-        jsonObject.remove(key)
+        userSettings.remove(key)
+        outstandingChanges.incrementAndGet()
         write()
     }
 
     override fun close() {
+        write(true)
     }
 
-    private fun write() {
-        gson.newJsonWriter(FileWriter(file)).let { writer ->
-            gson.toJson(jsonObject, writer)
-            writer.flush()
-            writer.close()
+    @Synchronized
+    private fun write(force: Boolean = false) {
+        if (force) {
+            outstandingChanges.set(0)
+            lastWrite = Instant.now()
+            gson.newJsonWriter(FileWriter(file)).let { writer ->
+                gson.toJson(gson.toJsonTree(userSettings), writer)
+                writer.flush()
+                writer.close()
+            }
+        } else if (outstandingChanges.get() > 100
+            || abs(Duration.between(Instant.now(), lastWrite).toSeconds()) >= 60
+        ) {
+            write(true)
         }
     }
 
     override fun getUserSettings(userId: Long, otherwise: UserSettings): UserSettings {
-        return get(userId.toString()) ?: otherwise
+        return get(userId) ?: otherwise
+    }
+
+    override fun getAllUsersSettings(): Map<Long, UserSettings> {
+        return userSettings
     }
 
     override fun saveUserSettings(userId: Long, settings: UserSettings) {
-        set(userId.toString(), settings)
+        set(userId, settings)
     }
 
     override fun saveUserSettings(userSettings: Map<Long, UserSettings>) {
-        userSettings.forEach { jsonObject.add(it.key.toString(), gson.toJsonTree(it.value)) }
+        this.userSettings.putAll(userSettings)
         write()
     }
 }

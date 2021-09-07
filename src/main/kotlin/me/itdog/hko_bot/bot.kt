@@ -153,7 +153,7 @@ open class WeatherBot {
                         escapeMarkdown("${it.name}${type} ($time)")
                     }
                     .collect(Collectors.joining("\n"))
-                "__*${escapeMarkdown(localiser.get(Localiser.Message.CURRENT_ACTIVE_WARNINGS))}*__\n$content"
+                "__*${escapeMarkdown(localiser.get(Localiser.Message.CURRENT_ACTIVE_WARNINGS))}*__ \\(${warning.activeWarnings().size}\\)\n$content"
             }
         }
     }
@@ -393,7 +393,7 @@ open class WeatherBot {
             )
 
         // schedule check warning
-        fixedRateTimer("weather_warning_check_task", true, period = 10000L) {
+        fixedRateTimer("weather_warning_check_task", true, period = 60000L) {
             if (lastWarnCheckTime == null) {
                 lastWarnCheckTime = Instant.now()
             } else {
@@ -411,8 +411,6 @@ open class WeatherBot {
                     }
                     .collect(Collectors.toList())
 
-                val new = warningInfo.activeWarnings()
-
                 receivedWarnings.addAll(newlyAdded.map {
                     val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
                     Pair(it.name!!, bulletinTime)
@@ -423,7 +421,7 @@ open class WeatherBot {
                 }
 
                 lastWarnCheckTime = checkTime
-                if (true || newlyAdded.isNotEmpty()) {
+                if (newlyAdded.isNotEmpty()) {
                     logger.debug("Found ${newlyAdded.size} new warnings, ${newlyAdded.map { it.name }}")
                 }
             }
@@ -517,7 +515,7 @@ class PollingWeatherBot(private val token: String, private val username: String)
     override fun onUpdateReceived(update: Update?) {
         if (update == null) return
         val userId = getUser(update).id
-        var userSettingHash = Global.userSettings.get(userId).hashCode()
+        val userSettingHash = Global.userSettings.get(userId).hashCode()
 
         when {
             update.hasInlineQuery() -> {

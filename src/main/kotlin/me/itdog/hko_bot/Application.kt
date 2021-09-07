@@ -3,7 +3,6 @@ package me.itdog.hko_bot
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
-import com.google.common.cache.RemovalNotification
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
