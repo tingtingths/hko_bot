@@ -3,16 +3,14 @@ package me.itdog.hko_bot
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
+import com.google.common.cache.RemovalNotification
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
-import redis.clients.jedis.Jedis
 import redis.clients.jedis.JedisPool
-import redis.clients.jedis.JedisPoolConfig
-import java.lang.Exception
+import java.io.File
 import java.net.URI
-import java.net.URISyntaxException
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
@@ -20,12 +18,22 @@ fun main(args: Array<String>) {
     Global.app = Application(args).also {
         it.start()
     }
+
+    Runtime.getRuntime().addShutdownHook(Thread {
+        run {
+            // persist all user settings before shutdown
+            println("Saving ${Global.userSettings.size()} cached user settings..")
+            Global.userSettings.cleanUp()
+            Global.persistent.saveUserSettings(Global.userSettings.asMap())
+            Global.persistent.close()
+        }
+    })
 }
 
 class Global {
     companion object {
         lateinit var app: Application
-        lateinit var persistent: Persistent
+        lateinit var persistent: UserSettingsPersistent
 
         // secondary cache for user settings
         val userSettings: LoadingCache<Long, UserSettings> = CacheBuilder.newBuilder()
@@ -69,7 +77,8 @@ class Application(args: Array<String>) {
                 .required()
                 .build()
         )
-        options.addOption(
+
+        val persistentGroup = OptionGroup().addOption(
             Option.builder("r")
                 .longOpt("redis")
                 .argName("redis")
@@ -79,12 +88,24 @@ class Application(args: Array<String>) {
                 .hasArg()
                 .required()
                 .build()
-        )
+        ).addOption(
+            Option.builder("f")
+                .longOpt("file")
+                .argName("file")
+                .type(String::class.java)
+                .numberOfArgs(1)
+                .desc("Data file")
+                .hasArg()
+                .required()
+                .build()
+        ).apply { isRequired = true }
+        options.addOptionGroup(persistentGroup)
 
         // parse arguments
         cmdLn = try {
             parser.parse(options, args)
         } catch (e: ParseException) {
+            println("ERROR ${e.message}")
             printHelp(options)
             exitProcess(1)
         }
@@ -96,12 +117,18 @@ class Application(args: Array<String>) {
 
         token = cmdLn.getOptionValue("token")
         username = cmdLn.getOptionValue("username")
-        Global.persistent = Persistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
+        when {
+            cmdLn.hasOption("redis") -> Global.persistent =
+                RedisPersistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
+            cmdLn.hasOption("file") -> Global.persistent = LocalFilePersistent(File(cmdLn.getOptionValue("file")))
+        }
     }
 
     private fun argumentsInvalidReason(cmdLine: CommandLine): String? {
         return try {
-            URI.create(cmdLine.getOptionValue("redis"))
+            if (cmdLine.hasOption("redis")) {
+                URI.create(cmdLine.getOptionValue("redis"))
+            }
             null
         } catch (e: Exception) {
             "Unable to parse redis uri, ${e.cause}"

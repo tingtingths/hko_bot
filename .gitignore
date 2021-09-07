@@ -78,3 +78,5 @@ build/
 
 # gradle build
 .gradle/
+
+persistent.json

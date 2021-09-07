@@ -3,9 +3,9 @@ package me.itdog.hko_bot
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
-import com.google.gson.Gson
 import me.itdog.hko_bot.api.HongKongObservatory
 import me.itdog.hko_bot.api.model.Flw
+import me.itdog.hko_bot.api.model.WarningInfo
 import me.itdog.hko_bot.api.model.WeatherInfo
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -20,7 +20,11 @@ import org.telegram.telegrambots.meta.api.objects.inlinequery.inputmessageconten
 import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultArticle
 import org.telegram.telegrambots.meta.generics.TelegramBot
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.util.*
 import java.util.concurrent.TimeUnit
+import java.util.stream.Collectors
+import kotlin.concurrent.fixedRateTimer
 
 
 enum class BotLocale {
@@ -87,18 +91,22 @@ open class WeatherBot {
         }
 
         private fun formatFlwTime(flw: Flw): String {
+            return formatBulletinDateTime(flw.bulletinDate, flw.bulletinTime)
+        }
+
+        private fun formatBulletinDateTime(date: String?, time: String?): String {
             var ret = ""
 
-            if (flw.bulletinDate != null) {
+            if (date != null) {
                 val inputFormat = SimpleDateFormat("yyyyMMdd")
                 val outputFormat = SimpleDateFormat("yyyy-MM-dd")
-                ret += outputFormat.format(inputFormat.parse(flw.bulletinDate))
+                ret += outputFormat.format(inputFormat.parse(date))
             }
-            if (flw.bulletinTime != null) {
+            if (time != null) {
                 val inputFormat = SimpleDateFormat("HHmm")
                 val outputFormat = SimpleDateFormat("HH:mm")
                 if (ret.isNotEmpty()) ret += " "
-                ret += outputFormat.format(inputFormat.parse(flw.bulletinTime))
+                ret += outputFormat.format(inputFormat.parse(time))
             }
 
             return ret
@@ -135,6 +143,19 @@ open class WeatherBot {
                 ret
             }
         }
+
+        fun composeWeatherWarningMarkdown(warning: WarningInfo): String {
+            return warning.let {
+                val content = warning.activeWarnings().stream()
+                    .map {
+                        val type = if (!it.type.isNullOrEmpty()) " - ${it.type}" else ""
+                        val time = formatBulletinDateTime(it.bulletinDate, it.bulletinTime)
+                        escapeMarkdown("${it.name}${type} ($time)")
+                    }
+                    .collect(Collectors.joining("\n"))
+                "__*${escapeMarkdown(localiser.get(Localiser.Message.CURRENT_ACTIVE_WARNINGS))}*__\n$content"
+            }
+        }
     }
 
     class Localiser(private val botLocale: BotLocale) {
@@ -146,6 +167,7 @@ open class WeatherBot {
         enum class Message {
             CURRENT_WEATHER_BTN,
             GENERAL_WEATHER_FORECAST_BTN,
+            ACTIVE_WARN_BTN,
             ABOUT_BTN,
             LANGUAGE_BTN,
             SETTINGS_BTN,
@@ -161,10 +183,13 @@ open class WeatherBot {
             UV_INTENSITY,
             LANG_CHI,
             LANG_ENG,
+            CURRENT_ACTIVE_WARNINGS
         }
 
         init {
             localisations[BotLocale.ZH_HK] = mapOf(
+                Pair(Message.ACTIVE_WARN_BTN, "天氣警告"),
+                Pair(Message.CURRENT_ACTIVE_WARNINGS, "天氣警告"),
                 Pair(Message.CURRENT_WEATHER_BTN, "天氣報告"),
                 Pair(Message.GENERAL_WEATHER_FORECAST_BTN, "天氣概況"),
                 Pair(Message.ABOUT_BTN, "關於<BOT NAME>"),
@@ -184,6 +209,8 @@ open class WeatherBot {
                 Pair(Message.OTHERS_BTN, "其他"),
             )
             localisations[BotLocale.EN_UK] = mapOf(
+                Pair(Message.ACTIVE_WARN_BTN, "Weather Warnings"),
+                Pair(Message.CURRENT_ACTIVE_WARNINGS, "Warnings in force"),
                 Pair(Message.CURRENT_WEATHER_BTN, "Current Weather"),
                 Pair(Message.GENERAL_WEATHER_FORECAST_BTN, "General Situation"),
                 Pair(Message.ABOUT_BTN, "About <BOT NAME>"),
@@ -235,8 +262,15 @@ open class WeatherBot {
     private val mainPage: QueryPage
     private val localisers = HashMap<BotLocale, Localiser>()
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
+    private val buildProperties: Properties = Properties()
+    private var lastWarnCheckTime: Instant? = null
+    private var receivedWarnings = hashSetOf<Pair<String, Instant>>()
 
     init {
+        buildProperties.load(
+            this::class.java.getResourceAsStream("/build.properties")
+        )
+
         // build localised assets
         for (locale in BotLocale.values()) {
             val localiser = Localiser(locale)
@@ -278,10 +312,9 @@ open class WeatherBot {
                 "about"
             ).apply {
                 buildMessage = {
-                    Pair(
-                        ReplyMode.UPDATE_QUERY,
-                        "Version 0.0.1"
-                    )
+                    val version = buildProperties.getProperty("version", "__VERSION__")
+                    val timestamp = buildProperties.getProperty("timestamp", "0")
+                    Pair(ReplyMode.UPDATE_QUERY, "$version+$timestamp")
                 }
             })
         buttons.add(
@@ -330,6 +363,19 @@ open class WeatherBot {
                     Pair(ReplyMode.RERENDER_QUERY, "")
                 }
             })
+        buttons.add(QueryButton(
+            { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.ACTIVE_WARN_BTN) },
+            "active_warnings"
+        ).apply {
+            buildMessage = {
+                val userId = getUser(it).id
+                val locale = getUserLocale(userId)
+                Pair(
+                    ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
+                    composers[locale]!!.composeWeatherWarningMarkdown(requestWarningInfo(locale))
+                )
+            }
+        })
         buttons.add(QueryButton({ "" }, "landing", "<BOT NAME>"))
 
         // setup page flow
@@ -338,12 +384,50 @@ open class WeatherBot {
                 QueryPage("current_weather"),
                 QueryPage("general_weather"),
                 QueryPage("9_day_forecast"),
+                QueryPage("active_warnings"),
                 QueryPage("others"),
                 QueryPage("settings")
                     .addItems("notification")
                     .addItems("language"),
                 QueryPage("about"),
             )
+
+        // schedule check warning
+        fixedRateTimer("weather_warning_check_task", true, period = 10000L) {
+            if (lastWarnCheckTime == null) {
+                lastWarnCheckTime = Instant.now()
+            } else {
+                val warningInfo = api.getWarningInfo()
+                val checkTime = Instant.now()
+                val fmt = SimpleDateFormat("yyyyMMddHHmm")
+                val newlyAdded = warningInfo.activeWarnings().stream()
+                    .filter {
+                        !(it.name.isNullOrEmpty() || it.bulletinDate.isNullOrEmpty() || it.bulletinTime.isNullOrEmpty())
+                    }
+                    .filter {
+                        val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
+                        !bulletinTime.isBefore(lastWarnCheckTime)
+                                && !receivedWarnings.contains(Pair(it.name, bulletinTime))
+                    }
+                    .collect(Collectors.toList())
+
+                val new = warningInfo.activeWarnings()
+
+                receivedWarnings.addAll(newlyAdded.map {
+                    val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
+                    Pair(it.name!!, bulletinTime)
+                })
+                // clean up old cache
+                receivedWarnings.removeIf {
+                    it.second.isBefore(lastWarnCheckTime)
+                }
+
+                lastWarnCheckTime = checkTime
+                if (true || newlyAdded.isNotEmpty()) {
+                    logger.debug("Found ${newlyAdded.size} new warnings, ${newlyAdded.map { it.name }}")
+                }
+            }
+        }
     }
 
     private fun getUserSettings(userId: Long): UserSettings {
@@ -364,10 +448,10 @@ open class WeatherBot {
         ) as WeatherInfo
     }
 
-    private fun requestWarningInfo(botLocale: BotLocale): WeatherInfo {
+    private fun requestWarningInfo(botLocale: BotLocale): WarningInfo {
         return cache.get(
             if (botLocale == BotLocale.ZH_HK) Cache.WARNING_INFO else Cache.WARNING_INFO_ENG
-        ) as WeatherInfo
+        ) as WarningInfo
     }
 
     fun handleInlineQuery(update: Update): AnswerInlineQuery {
@@ -421,7 +505,6 @@ class PollingWeatherBot(private val token: String, private val username: String)
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private val bot = WeatherBot()
-    private val gson = Gson()
 
     override fun getBotToken(): String {
         return token
@@ -433,9 +516,8 @@ class PollingWeatherBot(private val token: String, private val username: String)
 
     override fun onUpdateReceived(update: Update?) {
         if (update == null) return
-
         val userId = getUser(update).id
-        val userSettingsSnapshot = gson.toJson(Global.userSettings.get(userId))
+        var userSettingHash = Global.userSettings.get(userId).hashCode()
 
         when {
             update.hasInlineQuery() -> {
@@ -467,7 +549,9 @@ class PollingWeatherBot(private val token: String, private val username: String)
             }
         }
 
-        if (gson.toJson(Global.userSettings.get(userId)) != userSettingsSnapshot)
-            Global.persistent.setUserSettings(userId, Global.userSettings.get(userId))
+        // if settings updated, persist it
+        if (Global.userSettings.get(userId).hashCode() != userSettingHash) {
+            Global.persistent.saveUserSettings(userId, Global.userSettings.get(userId))
+        }
     }
 }

@@ -87,6 +87,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         // has declared buttons
         if (page.layout.isNotEmpty()) {
             page.layout
+                .asSequence()
                 .map { it.buttonData }
                 .map { findButton(it) }
                 .map { InlineKeyboardButton(it.buttonText.invoke(userId)).apply { callbackData = it.callbackData } }
@@ -98,7 +99,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         if (parent != null) {
             // append go back button
             val backBtnData = BACK_BTN_CALLBACK_DATA_PREFIX + parent.buttonData
-            markupButtons.add(listOf(InlineKeyboardButton("« Back").apply {
+            markupButtons.add(listOf(InlineKeyboardButton("«").apply {
                 callbackData = backBtnData
             }))
         }

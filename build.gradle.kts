@@ -1,3 +1,7 @@
+import java.io.FileWriter
+import java.util.*
+import java.text.SimpleDateFormat
+
 plugins {
     kotlin("jvm") version "1.5.20"
 }
@@ -24,7 +28,24 @@ dependencies {
     runtimeOnly("org.jetbrains.kotlin:kotlin-reflect")
 }
 
+tasks.create("createBuildProperties") {
+    doLast {
+        val timestamp = SimpleDateFormat("yyyyMMddHHmmss").format(Date())
+        val version = project.version.toString()
+
+        val properties = Properties()
+        properties["version"] = version
+        properties["timestamp"] = timestamp
+        properties.store(
+            FileWriter("$buildDir/resources/main/build.properties"),
+            "Generated build properties."
+        )
+    }
+}
+
 tasks.jar {
+    dependsOn("createBuildProperties")
+
     manifest {
         attributes(
             "Main-Class" to "me.itdog.hko_bot.ApplicationKt"
