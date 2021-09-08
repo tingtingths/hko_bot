@@ -272,7 +272,7 @@ open class WeatherBot(private val notiferBot: AbsSender) {
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
     private val buildProperties: Properties = Properties()
     private var lastWarnCheckTime: Instant? = null
-    private var receivedWarnings = hashSetOf<Pair<String, Instant>>()
+    private var receivedWarnings = hashMapOf<String, Instant>()
 
     init {
         buildProperties.load(
@@ -424,22 +424,32 @@ open class WeatherBot(private val notiferBot: AbsSender) {
                 lastWarnCheckTime = Instant.now()
             } else {
                 val fmt = SimpleDateFormat("yyyyMMddHHmm")
-                val newWarnings = warningsCheck(BotLocale.ZH_HK)
-                val newWarningsEng = warningsCheck(BotLocale.EN_UK)
+                val newWarnings = getNewWarnings(api.getWarningInfo().also {
+                    receivedWarnings.filter { received ->
+                        val actives = it.activeWarnings().map { it.name }.toSet()
+                        !actives.contains(received.key)
+                    }.forEach { entry ->
+                        receivedWarnings.remove(entry.key)
+                    }
+                })
+                val newWarningsEng = getNewWarnings(api.getWarningInfo(true).also {
+                    receivedWarnings.filter { received ->
+                        val actives = it.activeWarnings().map { it.name }.toSet()
+                        !actives.contains(received.key)
+                    }.forEach { entry ->
+                        receivedWarnings.remove(entry.key)
+                    }
+                })
                 val checkTime = Instant.now()
 
-                receivedWarnings.addAll(newWarnings.map {
+                receivedWarnings.putAll(newWarnings.map {
                     val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
                     Pair(it.name!!, bulletinTime)
                 })
-                receivedWarnings.addAll(newWarningsEng.map {
+                receivedWarnings.putAll(newWarningsEng.map {
                     val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
                     Pair(it.name!!, bulletinTime)
                 })
-                // clean up old cache
-                receivedWarnings.removeIf {
-                    it.second.isBefore(lastWarnCheckTime)
-                }
 
                 lastWarnCheckTime = checkTime
                 var allChatSettings: Map<Long, ChatSettings>? = null
@@ -489,17 +499,11 @@ open class WeatherBot(private val notiferBot: AbsSender) {
         }
     }
 
-    private fun warningsCheck(locale: BotLocale): List<WarningBase> {
-        val warningInfo = api.getWarningInfo(locale == BotLocale.EN_UK)
-        val fmt = SimpleDateFormat("yyyyMMddHHmm")
+    private fun getNewWarnings(warningInfo: WarningInfo): List<WarningBase> {
         return warningInfo.activeWarnings().stream()
             .filter {
                 !(it.name.isNullOrEmpty() || it.bulletinDate.isNullOrEmpty() || it.bulletinTime.isNullOrEmpty())
-            }
-            .filter {
-                val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
-                !bulletinTime.isBefore(lastWarnCheckTime)
-                        && !receivedWarnings.contains(Pair(it.name, bulletinTime))
+                        && !receivedWarnings.containsKey(it.name)
             }
             .collect(Collectors.toList())
     }

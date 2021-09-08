@@ -7,47 +7,47 @@ import javax.annotation.Generated
 
 @Generated("jsonschema2pojo")
 class WarningInfo {
-    @SerializedName("WCOLDC")
+    @SerializedName("WCOLDC", alternate = ["WCOLD"])
     @Expose
     var wcoldc: Wcoldc? = null
 
-    @SerializedName("WFIREC")
+    @SerializedName("WFIREC", alternate = ["WFIRE"])
     @Expose
     var wfirec: Wfirec? = null
 
-    @SerializedName("WFNTSAC")
+    @SerializedName("WFNTSAC", alternate = ["WFNTSA"])
     @Expose
     var wfntsac: Wfntsac? = null
 
-    @SerializedName("WFROSTC")
+    @SerializedName("WFROSTC", alternate = ["WFROST"])
     @Expose
     var wfrostc: Wfrostc? = null
 
-    @SerializedName("WHOTC")
+    @SerializedName("WHOTC", alternate = ["WHOT"])
     @Expose
     var whotc: Whotc? = null
 
-    @SerializedName("WLC")
+    @SerializedName("WLC", alternate = ["WL"])
     @Expose
     var wlc: Wlc? = null
 
-    @SerializedName("WMSGNLC")
+    @SerializedName("WMSGNLC", alternate = ["WMSGNL"])
     @Expose
     var wmsgnlc: Wmsgnlc? = null
 
-    @SerializedName("WRAINC")
+    @SerializedName("WRAINC", alternate = ["WRAIN"])
     @Expose
     var wrainc: Wrainc? = null
 
-    @SerializedName("WTCSGNLC")
+    @SerializedName("WTCSGNLC", alternate = ["WTCSGNL"])
     @Expose
     var wtcsgnlc: Wtcsgnlc? = null
 
-    @SerializedName("WTMWC")
+    @SerializedName("WTMWC", alternate = ["WTMW"])
     @Expose
     var wtmwc: Wtmwc? = null
 
-    @SerializedName("WTSC")
+    @SerializedName("WTSC", alternate = ["WTS"])
     @Expose
     var wtsc: Wtsc? = null
 
