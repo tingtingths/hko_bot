@@ -11,6 +11,7 @@ import java.io.FileReader
 import java.io.FileWriter
 import java.time.Duration
 import java.time.Instant
+import java.util.ArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
 import kotlin.math.abs
@@ -38,7 +39,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
     private enum class CacheKeyPrefix(val prefix: String) {
-        USER_SETTINGS("hko_bot_chat_settings_")
+        CHAT_SETTINGS("hko_bot_chat_settings_")
     }
 
     private fun borrowConnection(): Jedis {
@@ -80,7 +81,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     }
 
     override fun getChatSettings(id: Long, otherwise: ChatSettings?): ChatSettings? {
-        val key = CacheKeyPrefix.USER_SETTINGS.prefix + id
+        val key = CacheKeyPrefix.CHAT_SETTINGS.prefix + id
         val json = get(key)
         return if (json == null) otherwise else try {
             gson.fromJson(json, ChatSettings::class.java)
@@ -94,14 +95,22 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         var ret: Map<Long, ChatSettings>
         with(borrowConnection()) {
             // convert to list to maintain order
-            val allKeys = listOf(keys(CacheKeyPrefix.USER_SETTINGS.prefix + "??"))
-                .stream().toArray<String> { length -> arrayOfNulls(length) }
-            val settings = mget(*allKeys)
-            ret = allKeys.zip(settings) { _, v ->
-                Pair(v.toLong(), if (v != null) gson.fromJson(v, ChatSettings::class.java) else null)
-            }.filter {
-                it.second != null
-            }.toMap() as Map<Long, ChatSettings>
+            val keys = ArrayList(keys(CacheKeyPrefix.CHAT_SETTINGS.prefix + "*"))
+            keys.sort()
+            val allKeys = keys.toTypedArray()
+            ret = if (allKeys.isNotEmpty()) {
+                val settings = mget(*allKeys)
+                allKeys.zip(settings) { id, setting ->
+                    Pair(
+                        id.replaceFirst(CacheKeyPrefix.CHAT_SETTINGS.prefix, "").toLong(),
+                        if (setting != null) gson.fromJson(setting, ChatSettings::class.java) else null
+                    )
+                }.filter {
+                    it.second != null
+                }.toMap() as Map<Long, ChatSettings>
+            } else {
+                hashMapOf()
+            }
             this
         }.let { returnConnection(it) }
         return ret
@@ -109,7 +118,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
 
     override fun saveChatSettings(id: Long, settings: ChatSettings) {
         val json = gson.toJson(settings)
-        set(CacheKeyPrefix.USER_SETTINGS.prefix + id, json)
+        set(CacheKeyPrefix.CHAT_SETTINGS.prefix + id, json)
     }
 
     override fun saveChatSettings(chatSettings: Map<Long, ChatSettings>) {

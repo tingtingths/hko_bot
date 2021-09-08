@@ -271,8 +271,6 @@ open class WeatherBot(private val notiferBot: AbsSender) {
     private val localisers = HashMap<BotLocale, Localiser>()
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
     private val buildProperties: Properties = Properties()
-    private var lastWarnCheckTime: Instant? = null
-    private var receivedWarnings = hashMapOf<String, Instant>()
 
     init {
         buildProperties.load(
@@ -420,92 +418,8 @@ open class WeatherBot(private val notiferBot: AbsSender) {
 
         // schedule check warning
         fixedRateTimer("weather_warning_check_task", true, period = 20000L) {
-            if (lastWarnCheckTime == null) {
-                lastWarnCheckTime = Instant.now()
-            } else {
-                val fmt = SimpleDateFormat("yyyyMMddHHmm")
-                val newWarnings = getNewWarnings(api.getWarningInfo().also {
-                    receivedWarnings.filter { received ->
-                        val actives = it.activeWarnings().map { it.name }.toSet()
-                        !actives.contains(received.key)
-                    }.forEach { entry ->
-                        receivedWarnings.remove(entry.key)
-                    }
-                })
-                val newWarningsEng = getNewWarnings(api.getWarningInfo(true).also {
-                    receivedWarnings.filter { received ->
-                        val actives = it.activeWarnings().map { it.name }.toSet()
-                        !actives.contains(received.key)
-                    }.forEach { entry ->
-                        receivedWarnings.remove(entry.key)
-                    }
-                })
-                val checkTime = Instant.now()
 
-                receivedWarnings.putAll(newWarnings.map {
-                    val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
-                    Pair(it.name!!, bulletinTime)
-                })
-                receivedWarnings.putAll(newWarningsEng.map {
-                    val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
-                    Pair(it.name!!, bulletinTime)
-                })
-
-                lastWarnCheckTime = checkTime
-                var allChatSettings: Map<Long, ChatSettings>? = null
-                if (newWarnings.isNotEmpty()) {
-                    allChatSettings = Global.persistent.getAllChatsSettings()
-                    logger.debug("Found ${newWarnings.size} new warnings (${BotLocale.ZH_HK}), ${newWarnings.map { it.name }}")
-                    val text = "__*新天氣警告!!!*__\n" +
-                            newWarnings.joinToString("\n") { warning ->
-                                val type = if (!warning.type.isNullOrEmpty()) " - ${warning.type}" else ""
-                                val time = formatBulletinDateTime(warning.bulletinDate, warning.bulletinTime)
-                                escapeMarkdown("${warning.name}${type} ($time)")
-                            }
-
-                    allChatSettings.filter {
-                        val settings = it.value
-                        settings.isNotificationEnabled && settings.botLocale == BotLocale.ZH_HK
-                    }.map {
-                        val msg = SendMessage()
-                        msg.chatId = it.key.toString()
-                        msg.parseMode = "MarkdownV2"
-                        msg.text = text
-                        notiferBot.executeAsync(msg)
-                    }
-                }
-                if (newWarningsEng.isNotEmpty()) {
-                    if (allChatSettings == null) allChatSettings = Global.persistent.getAllChatsSettings()
-                    logger.debug("Found ${newWarningsEng.size} new warnings (${BotLocale.EN_UK}), ${newWarningsEng.map { it.name }}")
-                    val text = "__*New Weather Warning!!!*__\n" +
-                            newWarningsEng.joinToString("\n") { warning ->
-                                val type = if (!warning.type.isNullOrEmpty()) " - ${warning.type}" else ""
-                                val time = formatBulletinDateTime(warning.bulletinDate, warning.bulletinTime)
-                                escapeMarkdown("${warning.name}${type} ($time)")
-                            }
-
-                    allChatSettings.filter {
-                        val settings = it.value
-                        settings.isNotificationEnabled && settings.botLocale == BotLocale.EN_UK
-                    }.map {
-                        val msg = SendMessage()
-                        msg.chatId = it.key.toString()
-                        msg.parseMode = "MarkdownV2"
-                        msg.text = text
-                        notiferBot.executeAsync(msg)
-                    }
-                }
-            }
         }
-    }
-
-    private fun getNewWarnings(warningInfo: WarningInfo): List<WarningBase> {
-        return warningInfo.activeWarnings().stream()
-            .filter {
-                !(it.name.isNullOrEmpty() || it.bulletinDate.isNullOrEmpty() || it.bulletinTime.isNullOrEmpty())
-                        && !receivedWarnings.containsKey(it.name)
-            }
-            .collect(Collectors.toList())
     }
 
     private fun getChatSettings(id: Long): ChatSettings {
