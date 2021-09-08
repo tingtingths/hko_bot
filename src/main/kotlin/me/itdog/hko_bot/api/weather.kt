@@ -45,7 +45,7 @@ class HongKongObservatory {
         val resp = client.newCall(req).execute()
         val body = resp.body ?: throw Error("Empty response body...")
 
-        val pattern = Pattern.compile(".*?(?<json>\\{.*}).*")
+        val pattern = Pattern.compile(".*?(?<json>\\{.*}).*", Pattern.DOTALL)
         val matcher = pattern.matcher(body.string())
         if (!matcher.find()) throw Error("Unable to parse response body...")
         return gson.fromJson(matcher.group("json"), WarningInfo::class.java)

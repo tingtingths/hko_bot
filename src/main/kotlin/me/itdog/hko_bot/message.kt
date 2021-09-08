@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText
+import org.telegram.telegrambots.meta.api.objects.Chat
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.User
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
@@ -23,6 +24,17 @@ fun getUser(update: Update): User {
         update.hasCallbackQuery() -> return update.callbackQuery.from
     }
     throw IllegalArgumentException("Unable to get user from update")
+}
+
+fun getChat(update: Update): Chat {
+    when {
+        update.hasMessage() -> return update.message.chat
+        update.hasEditedMessage() -> return update.editedMessage.chat
+        update.hasChannelPost() -> return update.channelPost.chat
+        update.hasEditedChannelPost() -> return update.editedChannelPost.chat
+        update.hasCallbackQuery() -> return update.callbackQuery.message.chat
+    }
+    throw IllegalArgumentException("Unable to get chat from update")
 }
 
 class QueryGraphTraveller(private val root: QueryPage) {
@@ -67,13 +79,13 @@ class QueryGraphTraveller(private val root: QueryPage) {
         val button = findButton(currentPage.buttonData)
         reply.chatId = update.message.chatId.toString()
         reply.text = button.defaultMessage
-        val userId = getUser(update).id
+        val chatId = getChat(update).id
 
         if (currentPage.layout.isNotEmpty()) {
             val markupButtons = currentPage.layout
                 .map { it.buttonData }
                 .map { findButton(it) }
-                .map { InlineKeyboardButton(it.buttonText.invoke(userId)).apply { callbackData = it.callbackData } }
+                .map { InlineKeyboardButton(it.buttonText.invoke(chatId)).apply { callbackData = it.callbackData } }
                 .map { listOf(it) }
             reply.replyMarkup = InlineKeyboardMarkup(markupButtons)
         }
@@ -81,7 +93,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         return reply
     }
 
-    private fun buildMarkupButtons(page: QueryPage, userId: Long): List<List<InlineKeyboardButton>> {
+    private fun buildMarkupButtons(page: QueryPage, chatId: Long): List<List<InlineKeyboardButton>> {
         // build buttons
         val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
         // has declared buttons
@@ -90,7 +102,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 .asSequence()
                 .map { it.buttonData }
                 .map { findButton(it) }
-                .map { InlineKeyboardButton(it.buttonText.invoke(userId)).apply { callbackData = it.callbackData } }
+                .map { InlineKeyboardButton(it.buttonText.invoke(chatId)).apply { callbackData = it.callbackData } }
                 .map { listOf(it) }
                 .toCollection(markupButtons)
         }
@@ -109,7 +121,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
     fun react(update: Update): List<BotApiMethod<*>> {
         val messages = mutableListOf<BotApiMethod<*>>()
         val button = findButton(currentPage.buttonData)
-        val userId = getUser(update).id
+        val chatId = getChat(update).id
 
         val replyAction = button.buildMessage.invoke(update)
         val replyMode = replyAction.first
@@ -134,7 +146,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 editMessage.messageId = update.callbackQuery.message.messageId
                 editMessage.text = replyMessage
 
-                val markupButtons = buildMarkupButtons(currentPage, userId)
+                val markupButtons = buildMarkupButtons(currentPage, chatId)
                 if (markupButtons.isNotEmpty()) {
                     editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
                 }
@@ -147,7 +159,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
                 editMessage.messageId = update.callbackQuery.message.messageId
                 editMessage.text = update.callbackQuery.message.text // use existing message, no update needed
 
-                val markupButtons = buildMarkupButtons(page, userId)
+                val markupButtons = buildMarkupButtons(page, chatId)
                 if (markupButtons.isNotEmpty()) {
                     editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
                 }
@@ -172,7 +184,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         message: String,
         parse_mode: String? = null
     ): List<BotApiMethod<*>> {
-        val userId = getUser(update).id
+        val chatId = getChat(update).id
         val messages = mutableListOf<BotApiMethod<*>>()
         val newMessage = SendMessage()
         newMessage.chatId = update.callbackQuery.message.chatId.toString()
@@ -185,7 +197,7 @@ class QueryGraphTraveller(private val root: QueryPage) {
         editMessage.chatId = update.callbackQuery.message.chatId.toString()
         editMessage.text = findButton(page.buttonData).defaultMessage
 
-        val markupButtons = buildMarkupButtons(page, userId)
+        val markupButtons = buildMarkupButtons(page, chatId)
         if (markupButtons.isNotEmpty()) {
             editMessage.replyMarkup = InlineKeyboardMarkup(markupButtons)
         }

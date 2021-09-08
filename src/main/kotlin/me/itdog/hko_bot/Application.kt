@@ -21,9 +21,9 @@ fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(Thread {
         run {
             // persist all user settings before shutdown
-            println("Saving ${Global.userSettings.size()} cached user settings..")
-            Global.userSettings.cleanUp()
-            Global.persistent.saveUserSettings(Global.userSettings.asMap())
+            println("Saving ${Global.chatSettings.size()} cached user settings..")
+            Global.chatSettings.cleanUp()
+            Global.persistent.saveChatSettings(Global.chatSettings.asMap())
             Global.persistent.close()
         }
     })
@@ -32,13 +32,13 @@ fun main(args: Array<String>) {
 class Global {
     companion object {
         lateinit var app: Application
-        lateinit var persistent: UserSettingsPersistent
+        lateinit var persistent: ChatSettingsPersistent
 
         // secondary cache for user settings
-        val userSettings: LoadingCache<Long, UserSettings> = CacheBuilder.newBuilder()
+        val chatSettings: LoadingCache<Long, ChatSettings> = CacheBuilder.newBuilder()
             .expireAfterAccess(30, TimeUnit.SECONDS)
-            .build(CacheLoader.from { userId ->
-                persistent.getUserSettings(userId!!, UserSettings(BotLocale.EN_UK))
+            .build(CacheLoader.from { key ->
+                persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, false))
             })
     }
 }

@@ -5,6 +5,7 @@ import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import me.itdog.hko_bot.api.HongKongObservatory
 import me.itdog.hko_bot.api.model.Flw
+import me.itdog.hko_bot.api.model.WarningBase
 import me.itdog.hko_bot.api.model.WarningInfo
 import me.itdog.hko_bot.api.model.WeatherInfo
 import org.slf4j.Logger
@@ -18,6 +19,7 @@ import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.inlinequery.inputmessagecontent.InputTextMessageContent
 import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQueryResultArticle
+import org.telegram.telegrambots.meta.bots.AbsSender
 import org.telegram.telegrambots.meta.generics.TelegramBot
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -65,51 +67,51 @@ class WeatherBotBuilder {
     }
 }
 
-open class WeatherBot {
+fun escapeMarkdown(message: String): String {
+    return message.replace("_", "\\_")
+        .replace("*", "\\*")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .replace("~", "\\~")
+        .replace("`", "\\`")
+        .replace(">", "\\>")
+        .replace("#", "\\#")
+        .replace("+", "\\+")
+        .replace("-", "\\-")
+        .replace("=", "\\=")
+        .replace("|", "\\|")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace(".", "\\.")
+        .replace("!", "\\!")
+}
+
+fun formatBulletinDateTime(date: String?, time: String?): String {
+    var ret = ""
+
+    if (date != null) {
+        val inputFormat = SimpleDateFormat("yyyyMMdd")
+        val outputFormat = SimpleDateFormat("yyyy-MM-dd")
+        ret += outputFormat.format(inputFormat.parse(date))
+    }
+    if (time != null) {
+        val inputFormat = SimpleDateFormat("HHmm")
+        val outputFormat = SimpleDateFormat("HH:mm")
+        if (ret.isNotEmpty()) ret += " "
+        ret += outputFormat.format(inputFormat.parse(time))
+    }
+
+    return ret
+}
+
+open class WeatherBot(private val notiferBot: AbsSender) {
 
     class WeatherMessageComposer(private val localiser: Localiser) {
 
-        private fun escapeMarkdown(message: String): String {
-            return message.replace("_", "\\_")
-                .replace("*", "\\*")
-                .replace("[", "\\[")
-                .replace("]", "\\]")
-                .replace("(", "\\(")
-                .replace(")", "\\)")
-                .replace("~", "\\~")
-                .replace("`", "\\`")
-                .replace(">", "\\>")
-                .replace("#", "\\#")
-                .replace("+", "\\+")
-                .replace("-", "\\-")
-                .replace("=", "\\=")
-                .replace("|", "\\|")
-                .replace("{", "\\{")
-                .replace("}", "\\}")
-                .replace(".", "\\.")
-                .replace("!", "\\!")
-        }
-
         private fun formatFlwTime(flw: Flw): String {
             return formatBulletinDateTime(flw.bulletinDate, flw.bulletinTime)
-        }
-
-        private fun formatBulletinDateTime(date: String?, time: String?): String {
-            var ret = ""
-
-            if (date != null) {
-                val inputFormat = SimpleDateFormat("yyyyMMdd")
-                val outputFormat = SimpleDateFormat("yyyy-MM-dd")
-                ret += outputFormat.format(inputFormat.parse(date))
-            }
-            if (time != null) {
-                val inputFormat = SimpleDateFormat("HHmm")
-                val outputFormat = SimpleDateFormat("HH:mm")
-                if (ret.isNotEmpty()) ret += " "
-                ret += outputFormat.format(inputFormat.parse(time))
-            }
-
-            return ret
         }
 
         fun composeCurrentWeatherMarkdown(info: WeatherInfo): String {
@@ -174,6 +176,8 @@ open class WeatherBot {
             NINE_DAYS_FORECAST_BTN,
             OTHERS_BTN,
             NOTIFICATION_BTN,
+            ENABLED,
+            DISABLED,
             OBSERVATION_TIME,
             TEMPERATURE,
             MAX_TEMPERATURE,
@@ -207,6 +211,8 @@ open class WeatherBot {
                 Pair(Message.NOTIFICATION_BTN, "通知"),
                 Pair(Message.NINE_DAYS_FORECAST_BTN, "九天天氣預報"),
                 Pair(Message.OTHERS_BTN, "其他"),
+                Pair(Message.ENABLED, "已啟用"),
+                Pair(Message.DISABLED, "已停用"),
             )
             localisations[BotLocale.EN_UK] = mapOf(
                 Pair(Message.ACTIVE_WARN_BTN, "Weather Warnings"),
@@ -228,6 +234,8 @@ open class WeatherBot {
                 Pair(Message.NOTIFICATION_BTN, "Notification"),
                 Pair(Message.NINE_DAYS_FORECAST_BTN, "9-day Forecast"),
                 Pair(Message.OTHERS_BTN, "Others"),
+                Pair(Message.ENABLED, "Enabled"),
+                Pair(Message.DISABLED, "Disabled"),
             )
         }
 
@@ -280,11 +288,11 @@ open class WeatherBot {
 
         // build buttons
         buttons.add(QueryButton(
-            { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.CURRENT_WEATHER_BTN) },
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.CURRENT_WEATHER_BTN) },
             "current_weather"
         ).apply {
             buildMessage = {
-                val locale = getUserLocale(getUser(it).id)
+                val locale = getChatLocale(getChat(it).id)
                 Pair(
                     ReplyMode.NEW_MESSAGE_AND_BACK,
                     composers[locale]!!.composeCurrentWeatherMarkdown(requestGeneralInfo(locale))
@@ -293,13 +301,13 @@ open class WeatherBot {
         })
         buttons.add(
             QueryButton(
-                { userId ->
-                    localisers[getUserLocale(userId)]!!.get(Localiser.Message.GENERAL_WEATHER_FORECAST_BTN)
+                { chatId ->
+                    localisers[getChatLocale(chatId)]!!.get(Localiser.Message.GENERAL_WEATHER_FORECAST_BTN)
                 },
                 "general_weather"
             ).apply {
                 buildMessage = {
-                    val locale = getUserLocale(getUser(it).id)
+                    val locale = getChatLocale(getChat(it).id)
                     Pair(
                         ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
                         composers[locale]!!.composeGeneralWeatherInfoMarkdown(requestGeneralInfo(locale))
@@ -308,7 +316,7 @@ open class WeatherBot {
             })
         buttons.add(
             QueryButton(
-                { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.ABOUT_BTN) },
+                { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.ABOUT_BTN) },
                 "about"
             ).apply {
                 buildMessage = {
@@ -319,34 +327,52 @@ open class WeatherBot {
             })
         buttons.add(
             QueryButton(
-                { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.SETTINGS_BTN) },
+                { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.SETTINGS_BTN) },
                 "settings"
             )
         )
         buttons.add(
             QueryButton(
-                { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.NOTIFICATION_BTN) },
+                { chatId ->
+                    val settings = getChatSettings(chatId)
+                    "${localisers[settings.botLocale]!!.get(Localiser.Message.NOTIFICATION_BTN)}: ${
+                        localisers[settings.botLocale]!!.get(
+                            if (settings.isNotificationEnabled) {
+                                Localiser.Message.ENABLED
+                            } else {
+                                Localiser.Message.DISABLED
+                            }
+                        )
+                    }"
+                },
                 "notification"
-            )
+            ).apply {
+                buildMessage = {
+                    val chatId = getChat(it).id
+                    val settings = getChatSettings(chatId)
+                    settings.isNotificationEnabled = !settings.isNotificationEnabled
+                    Pair(ReplyMode.RERENDER_QUERY, "")
+                }
+            }
         )
         buttons.add(
             QueryButton(
-                { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.NINE_DAYS_FORECAST_BTN) },
+                { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.NINE_DAYS_FORECAST_BTN) },
                 "9_day_forecast"
             )
         )
         buttons.add(
             QueryButton(
-                { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.OTHERS_BTN) },
+                { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.OTHERS_BTN) },
                 "others"
             )
         )
         buttons.add(
             QueryButton(
-                { userId ->
-                    "${localisers[getUserLocale(userId)]!!.get(Localiser.Message.LANGUAGE_BTN)}: ${
-                        localisers[getUserLocale(userId)]!!.get(
-                            if (getUserLocale(userId) == BotLocale.ZH_HK) {
+                { chatId ->
+                    "${localisers[getChatLocale(chatId)]!!.get(Localiser.Message.LANGUAGE_BTN)}: ${
+                        localisers[getChatLocale(chatId)]!!.get(
+                            if (getChatLocale(chatId) == BotLocale.ZH_HK) {
                                 Localiser.Message.LANG_CHI
                             } else {
                                 Localiser.Message.LANG_ENG
@@ -357,19 +383,19 @@ open class WeatherBot {
                 "language"
             ).apply {
                 buildMessage = {
-                    val userId = getUser(it).id
-                    if (getUserLocale(userId) == BotLocale.ZH_HK) setUserLocale(userId, BotLocale.EN_UK)
-                    else setUserLocale(userId, BotLocale.ZH_HK)
+                    val chatId = getChat(it).id
+                    if (getChatLocale(chatId) == BotLocale.ZH_HK) setChatLocale(chatId, BotLocale.EN_UK)
+                    else setChatLocale(chatId, BotLocale.ZH_HK)
                     Pair(ReplyMode.RERENDER_QUERY, "")
                 }
             })
         buttons.add(QueryButton(
-            { userId -> localisers[getUserLocale(userId)]!!.get(Localiser.Message.ACTIVE_WARN_BTN) },
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(Localiser.Message.ACTIVE_WARN_BTN) },
             "active_warnings"
         ).apply {
             buildMessage = {
-                val userId = getUser(it).id
-                val locale = getUserLocale(userId)
+                val chatId = getChat(it).id
+                val locale = getChatLocale(chatId)
                 Pair(
                     ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
                     composers[locale]!!.composeWeatherWarningMarkdown(requestWarningInfo(locale))
@@ -393,25 +419,20 @@ open class WeatherBot {
             )
 
         // schedule check warning
-        fixedRateTimer("weather_warning_check_task", true, period = 60000L) {
+        fixedRateTimer("weather_warning_check_task", true, period = 20000L) {
             if (lastWarnCheckTime == null) {
                 lastWarnCheckTime = Instant.now()
             } else {
-                val warningInfo = api.getWarningInfo()
-                val checkTime = Instant.now()
                 val fmt = SimpleDateFormat("yyyyMMddHHmm")
-                val newlyAdded = warningInfo.activeWarnings().stream()
-                    .filter {
-                        !(it.name.isNullOrEmpty() || it.bulletinDate.isNullOrEmpty() || it.bulletinTime.isNullOrEmpty())
-                    }
-                    .filter {
-                        val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
-                        !bulletinTime.isBefore(lastWarnCheckTime)
-                                && !receivedWarnings.contains(Pair(it.name, bulletinTime))
-                    }
-                    .collect(Collectors.toList())
+                val newWarnings = warningsCheck(BotLocale.ZH_HK)
+                val newWarningsEng = warningsCheck(BotLocale.EN_UK)
+                val checkTime = Instant.now()
 
-                receivedWarnings.addAll(newlyAdded.map {
+                receivedWarnings.addAll(newWarnings.map {
+                    val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
+                    Pair(it.name!!, bulletinTime)
+                })
+                receivedWarnings.addAll(newWarningsEng.map {
                     val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
                     Pair(it.name!!, bulletinTime)
                 })
@@ -421,23 +442,78 @@ open class WeatherBot {
                 }
 
                 lastWarnCheckTime = checkTime
-                if (newlyAdded.isNotEmpty()) {
-                    logger.debug("Found ${newlyAdded.size} new warnings, ${newlyAdded.map { it.name }}")
+                var allChatSettings: Map<Long, ChatSettings>? = null
+                if (newWarnings.isNotEmpty()) {
+                    allChatSettings = Global.persistent.getAllChatsSettings()
+                    logger.debug("Found ${newWarnings.size} new warnings (${BotLocale.ZH_HK}), ${newWarnings.map { it.name }}")
+                    val text = "__*新天氣警告!!!*__\n" +
+                            newWarnings.joinToString("\n") { warning ->
+                                val type = if (!warning.type.isNullOrEmpty()) " - ${warning.type}" else ""
+                                val time = formatBulletinDateTime(warning.bulletinDate, warning.bulletinTime)
+                                escapeMarkdown("${warning.name}${type} ($time)")
+                            }
+
+                    allChatSettings.filter {
+                        val settings = it.value
+                        settings.isNotificationEnabled && settings.botLocale == BotLocale.ZH_HK
+                    }.map {
+                        val msg = SendMessage()
+                        msg.chatId = it.key.toString()
+                        msg.parseMode = "MarkdownV2"
+                        msg.text = text
+                        notiferBot.executeAsync(msg)
+                    }
+                }
+                if (newWarningsEng.isNotEmpty()) {
+                    if (allChatSettings == null) allChatSettings = Global.persistent.getAllChatsSettings()
+                    logger.debug("Found ${newWarningsEng.size} new warnings (${BotLocale.EN_UK}), ${newWarningsEng.map { it.name }}")
+                    val text = "__*New Weather Warning!!!*__\n" +
+                            newWarningsEng.joinToString("\n") { warning ->
+                                val type = if (!warning.type.isNullOrEmpty()) " - ${warning.type}" else ""
+                                val time = formatBulletinDateTime(warning.bulletinDate, warning.bulletinTime)
+                                escapeMarkdown("${warning.name}${type} ($time)")
+                            }
+
+                    allChatSettings.filter {
+                        val settings = it.value
+                        settings.isNotificationEnabled && settings.botLocale == BotLocale.EN_UK
+                    }.map {
+                        val msg = SendMessage()
+                        msg.chatId = it.key.toString()
+                        msg.parseMode = "MarkdownV2"
+                        msg.text = text
+                        notiferBot.executeAsync(msg)
+                    }
                 }
             }
         }
     }
 
-    private fun getUserSettings(userId: Long): UserSettings {
-        return Global.userSettings.get(userId)
+    private fun warningsCheck(locale: BotLocale): List<WarningBase> {
+        val warningInfo = api.getWarningInfo(locale == BotLocale.EN_UK)
+        val fmt = SimpleDateFormat("yyyyMMddHHmm")
+        return warningInfo.activeWarnings().stream()
+            .filter {
+                !(it.name.isNullOrEmpty() || it.bulletinDate.isNullOrEmpty() || it.bulletinTime.isNullOrEmpty())
+            }
+            .filter {
+                val bulletinTime = fmt.parse(it.bulletinDate + it.bulletinTime).toInstant()
+                !bulletinTime.isBefore(lastWarnCheckTime)
+                        && !receivedWarnings.contains(Pair(it.name, bulletinTime))
+            }
+            .collect(Collectors.toList())
     }
 
-    private fun getUserLocale(userId: Long): BotLocale {
-        return getUserSettings(userId).botLocale
+    private fun getChatSettings(id: Long): ChatSettings {
+        return Global.chatSettings.get(id)
     }
 
-    private fun setUserLocale(userId: Long, locale: BotLocale) {
-        Global.userSettings.get(userId).apply { botLocale = locale }
+    private fun getChatLocale(id: Long): BotLocale {
+        return getChatSettings(id).botLocale
+    }
+
+    private fun setChatLocale(id: Long, locale: BotLocale) {
+        Global.chatSettings.get(id).apply { botLocale = locale }
     }
 
     private fun requestGeneralInfo(botLocale: BotLocale): WeatherInfo {
@@ -502,7 +578,7 @@ open class WeatherBot {
 class PollingWeatherBot(private val token: String, private val username: String) : TelegramLongPollingBot() {
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
-    private val bot = WeatherBot()
+    private val bot = WeatherBot(this)
 
     override fun getBotToken(): String {
         return token
@@ -513,43 +589,44 @@ class PollingWeatherBot(private val token: String, private val username: String)
     }
 
     override fun onUpdateReceived(update: Update?) {
-        if (update == null) return
+        if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return
+        val chatId = getChat(update).id
         val userId = getUser(update).id
-        val userSettingHash = Global.userSettings.get(userId).hashCode()
+        val chatSettingHash = Global.chatSettings.get(chatId).hashCode()
+        val completeAction = Runnable {
+            if (Global.chatSettings.get(chatId).hashCode() != chatSettingHash) {
+                Global.persistent.saveChatSettings(chatId, Global.chatSettings.get(chatId))
+            }
+        }
 
         when {
             update.hasInlineQuery() -> {
                 logger.debug("($userId), inline query: ${update.inlineQuery.query}")
-                execute(bot.handleInlineQuery(update))
+                executeAsync(bot.handleInlineQuery(update)).thenRun(completeAction)
             }
             update.hasMessage() -> {
                 logger.debug("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
-                execute(bot.handleMessage(update))
+                executeAsync(bot.handleMessage(update)).thenRun(completeAction)
             }
             update.hasCallbackQuery() -> {
                 logger.debug("($userId), callback query: ${update.callbackQuery.data}")
                 val replies = bot.handleCallbackQuery(update)
                 for (reply in replies) {
                     when (reply) {
-                        is SendMessage -> execute(reply)
-                        is SendDocument -> execute(reply)
-                        is SendPhoto -> execute(reply)
-                        is SendVideo -> execute(reply)
-                        is SendVideoNote -> execute(reply)
-                        is SendSticker -> execute(reply)
-                        is SendAudio -> execute(reply)
-                        is SendVoice -> execute(reply)
-                        is SendAnimation -> execute(reply)
-                        is EditMessageText -> execute(reply)
+                        is SendMessage -> executeAsync(reply).thenRun(completeAction)
+                        is SendDocument -> executeAsync(reply).thenRun(completeAction)
+                        is SendPhoto -> executeAsync(reply).thenRun(completeAction)
+                        is SendVideo -> executeAsync(reply).thenRun(completeAction)
+                        is SendVideoNote -> executeAsync(reply).thenRun(completeAction)
+                        is SendSticker -> executeAsync(reply).thenRun(completeAction)
+                        is SendAudio -> executeAsync(reply).thenRun(completeAction)
+                        is SendVoice -> executeAsync(reply).thenRun(completeAction)
+                        is SendAnimation -> executeAsync(reply).thenRun(completeAction)
+                        is EditMessageText -> executeAsync(reply).thenRun(completeAction)
                         else -> throw Exception("Unsupported reply type $reply")
                     }
                 }
             }
-        }
-
-        // if settings updated, persist it
-        if (Global.userSettings.get(userId).hashCode() != userSettingHash) {
-            Global.persistent.saveUserSettings(userId, Global.userSettings.get(userId))
         }
     }
 }

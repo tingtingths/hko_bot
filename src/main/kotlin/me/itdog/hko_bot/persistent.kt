@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Stream
 import kotlin.math.abs
 
-data class UserSettings(var botLocale: BotLocale)
+data class ChatSettings(var botLocale: BotLocale, var isNotificationEnabled: Boolean)
 
 interface KeyValuePersistent<K, V> {
     fun get(key: K): V?
@@ -24,21 +24,21 @@ interface KeyValuePersistent<K, V> {
     fun close()
 }
 
-interface UserSettingsPersistent {
-    fun getUserSettings(userId: Long, otherwise: UserSettings): UserSettings
-    fun getAllUsersSettings(): Map<Long, UserSettings>
-    fun saveUserSettings(userId: Long, settings: UserSettings)
-    fun saveUserSettings(userSettings: Map<Long, UserSettings>)
+interface ChatSettingsPersistent {
+    fun getChatSettings(id: Long, otherwise: ChatSettings? = null): ChatSettings?
+    fun getAllChatsSettings(): Map<Long, ChatSettings>
+    fun saveChatSettings(id: Long, settings: ChatSettings)
+    fun saveChatSettings(chatSettings: Map<Long, ChatSettings>)
     fun close()
 }
 
-class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<String, String>, UserSettingsPersistent {
+class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<String, String>, ChatSettingsPersistent {
 
     private val gson = Gson()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
     private enum class CacheKeyPrefix(val prefix: String) {
-        USER_SETTINGS("hko_bot_user_settings_")
+        USER_SETTINGS("hko_bot_chat_settings_")
     }
 
     private fun borrowConnection(): Jedis {
@@ -79,42 +79,42 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         jedisPool.close()
     }
 
-    override fun getUserSettings(userId: Long, otherwise: UserSettings): UserSettings {
-        val key = CacheKeyPrefix.USER_SETTINGS.prefix + userId
+    override fun getChatSettings(id: Long, otherwise: ChatSettings?): ChatSettings? {
+        val key = CacheKeyPrefix.USER_SETTINGS.prefix + id
         val json = get(key)
         return if (json == null) otherwise else try {
-            gson.fromJson(json, UserSettings::class.java)
+            gson.fromJson(json, ChatSettings::class.java)
         } catch (e: Exception) {
             del(key)
             otherwise
         }
     }
 
-    override fun getAllUsersSettings(): Map<Long, UserSettings> {
-        var ret: Map<Long, UserSettings>
+    override fun getAllChatsSettings(): Map<Long, ChatSettings> {
+        var ret: Map<Long, ChatSettings>
         with(borrowConnection()) {
             // convert to list to maintain order
             val allKeys = listOf(keys(CacheKeyPrefix.USER_SETTINGS.prefix + "??"))
                 .stream().toArray<String> { length -> arrayOfNulls(length) }
             val settings = mget(*allKeys)
-            ret = allKeys.zip(settings) { k, v ->
-                Pair(v.toLong(), if (v != null) gson.fromJson(v, UserSettings::class.java) else null)
+            ret = allKeys.zip(settings) { _, v ->
+                Pair(v.toLong(), if (v != null) gson.fromJson(v, ChatSettings::class.java) else null)
             }.filter {
                 it.second != null
-            }.toMap() as Map<Long, UserSettings>
+            }.toMap() as Map<Long, ChatSettings>
             this
         }.let { returnConnection(it) }
         return ret
     }
 
-    override fun saveUserSettings(userId: Long, settings: UserSettings) {
+    override fun saveChatSettings(id: Long, settings: ChatSettings) {
         val json = gson.toJson(settings)
-        set(CacheKeyPrefix.USER_SETTINGS.prefix + userId, json)
+        set(CacheKeyPrefix.USER_SETTINGS.prefix + id, json)
     }
 
-    override fun saveUserSettings(userSettings: Map<Long, UserSettings>) {
+    override fun saveChatSettings(chatSettings: Map<Long, ChatSettings>) {
         with(borrowConnection()) {
-            val lst = userSettings.entries.stream()
+            val lst = chatSettings.entries.stream()
                 .flatMap { entry ->
                     Stream.of(entry.key.toString(), gson.toJson(entry.value))
                 }
@@ -125,10 +125,10 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     }
 }
 
-class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, UserSettings>, UserSettingsPersistent {
+class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, ChatSettings>, ChatSettingsPersistent {
 
     private val gson = Gson()
-    private var userSettings: MutableMap<Long, UserSettings> = mutableMapOf()
+    private var chatSettings: MutableMap<Long, ChatSettings> = mutableMapOf()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private var outstandingChanges: AtomicInteger = AtomicInteger(0)
     private var lastWrite = Instant.now()
@@ -143,9 +143,9 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Use
         }
         // read from file
         gson.newJsonReader(FileReader(file)).let { reader ->
-            userSettings = try {
+            chatSettings = try {
                 if (file.length() > 0)
-                    gson.fromJson(reader, object : TypeToken<Map<Long, UserSettings>>() {}.type)
+                    gson.fromJson(reader, object : TypeToken<Map<Long, ChatSettings>>() {}.type)
                 else
                     mutableMapOf()
             } catch (e: Exception) {
@@ -159,22 +159,22 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Use
         }
     }
 
-    override fun get(key: Long): UserSettings? {
-        val value = userSettings[key]
+    override fun get(key: Long): ChatSettings? {
+        val value = chatSettings[key]
         logger.debug("GET $key=$value")
         return value
     }
 
-    override fun set(key: Long, value: UserSettings) {
+    override fun set(key: Long, value: ChatSettings) {
         logger.debug("SET $key=$value")
-        userSettings[key] = value
+        chatSettings[key] = value
         outstandingChanges.incrementAndGet()
         write()
     }
 
     override fun del(key: Long) {
         logger.debug("DEL $key")
-        userSettings.remove(key)
+        chatSettings.remove(key)
         outstandingChanges.incrementAndGet()
         write()
     }
@@ -189,7 +189,7 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Use
             outstandingChanges.set(0)
             lastWrite = Instant.now()
             gson.newJsonWriter(FileWriter(file)).let { writer ->
-                gson.toJson(gson.toJsonTree(userSettings), writer)
+                gson.toJson(gson.toJsonTree(chatSettings), writer)
                 writer.flush()
                 writer.close()
             }
@@ -200,20 +200,20 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Use
         }
     }
 
-    override fun getUserSettings(userId: Long, otherwise: UserSettings): UserSettings {
-        return get(userId) ?: otherwise
+    override fun getChatSettings(id: Long, otherwise: ChatSettings?): ChatSettings? {
+        return get(id) ?: otherwise
     }
 
-    override fun getAllUsersSettings(): Map<Long, UserSettings> {
-        return userSettings
+    override fun getAllChatsSettings(): Map<Long, ChatSettings> {
+        return chatSettings
     }
 
-    override fun saveUserSettings(userId: Long, settings: UserSettings) {
-        set(userId, settings)
+    override fun saveChatSettings(id: Long, settings: ChatSettings) {
+        set(id, settings)
     }
 
-    override fun saveUserSettings(userSettings: Map<Long, UserSettings>) {
-        this.userSettings.putAll(userSettings)
+    override fun saveChatSettings(chatSettings: Map<Long, ChatSettings>) {
+        this.chatSettings.putAll(chatSettings)
         write()
     }
 }

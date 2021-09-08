@@ -2,12 +2,19 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
+val appMainClass: String by project
+
 plugins {
     kotlin("jvm") version "1.5.20"
+    application
 }
 
 group = "me.itdog"
 version = "0.0.1-SNAPSHOT"
+
+application {
+    mainClass.set(appMainClass)
+}
 
 repositories {
     mavenCentral()
@@ -48,7 +55,7 @@ tasks.jar {
 
     manifest {
         attributes(
-            "Main-Class" to "me.itdog.hko_bot.ApplicationKt"
+            "Main-Class" to appMainClass
         )
     }
 
