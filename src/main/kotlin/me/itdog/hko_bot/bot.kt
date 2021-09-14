@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.bots.AbsSender
 import org.telegram.telegrambots.meta.generics.TelegramBot
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.stream.Collectors
 import kotlin.concurrent.fixedRateTimer
@@ -598,29 +599,39 @@ class PollingWeatherBot(private val token: String, private val username: String,
         when {
             update.hasInlineQuery() -> {
                 logger.debug("($userId), inline query: ${update.inlineQuery.query}")
-                executeAsync(bot.handleInlineQuery(update)).thenRun(completeAction)
+                executeAsync(bot.handleInlineQuery(update)).thenRunAsync(completeAction)
             }
             update.hasMessage() -> {
                 logger.debug("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
-                executeAsync(bot.handleMessage(update)).thenRun(completeAction)
+                executeAsync(bot.handleMessage(update)).thenRunAsync(completeAction)
             }
             update.hasCallbackQuery() -> {
-                logger.debug("($userId), callback query: ${update.callbackQuery.data}")
-                val replies = bot.handleCallbackQuery(update)
-                for (reply in replies) {
-                    when (reply) {
-                        is SendMessage -> executeAsync(reply).thenRun(completeAction)
-                        is SendDocument -> executeAsync(reply).thenRun(completeAction)
-                        is SendPhoto -> executeAsync(reply).thenRun(completeAction)
-                        is SendVideo -> executeAsync(reply).thenRun(completeAction)
-                        is SendVideoNote -> executeAsync(reply).thenRun(completeAction)
-                        is SendSticker -> executeAsync(reply).thenRun(completeAction)
-                        is SendAudio -> executeAsync(reply).thenRun(completeAction)
-                        is SendVoice -> executeAsync(reply).thenRun(completeAction)
-                        is SendAnimation -> executeAsync(reply).thenRun(completeAction)
-                        is EditMessageText -> executeAsync(reply).thenRun(completeAction)
+                fun execReply(reply: BotApiMethod<*>): CompletableFuture<*> {
+                    return when (reply) {
+                        is SendMessage -> executeAsync(reply)
+                        is SendDocument -> executeAsync(reply)
+                        is SendPhoto -> executeAsync(reply)
+                        is SendVideo -> executeAsync(reply)
+                        is SendVideoNote -> executeAsync(reply)
+                        is SendSticker -> executeAsync(reply)
+                        is SendAudio -> executeAsync(reply)
+                        is SendVoice -> executeAsync(reply)
+                        is SendAnimation -> executeAsync(reply)
+                        is EditMessageText -> executeAsync(reply)
                         else -> throw Exception("Unsupported reply type $reply")
                     }
+                }
+
+                logger.debug("($userId), callback query: ${update.callbackQuery.data}")
+                val replies = bot.handleCallbackQuery(update)
+                if (replies.isNotEmpty()) {
+                    var future: CompletableFuture<*>? = null
+                    for (reply in replies) {
+                        future = if (future == null) execReply(reply) else future.thenRunAsync {
+                            execReply(reply)
+                        }
+                    }
+                    future!!.thenRunAsync(completeAction)
                 }
             }
         }
