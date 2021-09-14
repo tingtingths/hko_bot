@@ -11,10 +11,14 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 import redis.clients.jedis.JedisPool
 import java.io.File
 import java.net.URI
+import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    Global.buildProperties.load(
+        Application::class.java.getResourceAsStream("/build.properties")
+    )
     Global.app = Application(args).also {
         it.start()
     }
@@ -41,6 +45,8 @@ class Global {
             .build(CacheLoader.from { key ->
                 persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, false))
             })
+
+        val buildProperties = Properties()
     }
 }
 
@@ -155,7 +161,9 @@ class Application(args: Array<String>) {
 
     private fun printHelp(options: Options) {
         val helpFmt = HelpFormatter()
-        helpFmt.printHelp("hko_bot", options)
+        val version = Global.buildProperties.getProperty("version", "__VERSION__")
+        val timestamp = Global.buildProperties.getProperty("timestamp", "0")
+        helpFmt.printHelp("hko_bot $version+$timestamp", options)
     }
 
     fun start() {

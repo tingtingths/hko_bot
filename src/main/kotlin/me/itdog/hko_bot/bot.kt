@@ -299,13 +299,8 @@ open class WeatherBot(val telegramBot: AbsSender) {
     private val mainPage: QueryPage
     private val localisers = HashMap<BotLocale, Localiser>()
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
-    private val buildProperties: Properties = Properties()
 
     init {
-        buildProperties.load(
-            this::class.java.getResourceAsStream("/build.properties")
-        )
-
         // build localised assets
         for (locale in BotLocale.values()) {
             val localiser = Localiser(locale)
@@ -347,8 +342,8 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 "about"
             ).apply {
                 buildMessage = {
-                    val version = buildProperties.getProperty("version", "__VERSION__")
-                    val timestamp = buildProperties.getProperty("timestamp", "0")
+                    val version = Global.buildProperties.getProperty("version", "__VERSION__")
+                    val timestamp = Global.buildProperties.getProperty("timestamp", "0")
                     Pair(ReplyMode.UPDATE_QUERY, "$version+$timestamp")
                 }
             })
