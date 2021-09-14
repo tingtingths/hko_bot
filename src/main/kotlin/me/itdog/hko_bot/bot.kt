@@ -9,6 +9,7 @@ import me.itdog.hko_bot.api.model.WarningInfo
 import me.itdog.hko_bot.api.model.WeatherInfo
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.telegram.telegrambots.bots.DefaultBotOptions
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
 import org.telegram.telegrambots.meta.api.methods.AnswerInlineQuery
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
@@ -36,6 +37,7 @@ class WeatherBotBuilder {
     private var token: String? = null
     private var username: String? = null
     private var isWebhook = false
+    private var botOptions = DefaultBotOptions()
 
     fun token(token: String): WeatherBotBuilder {
         this.token = token
@@ -44,6 +46,11 @@ class WeatherBotBuilder {
 
     fun username(username: String): WeatherBotBuilder {
         this.username = username
+        return this
+    }
+
+    fun botOptions(botOptions: DefaultBotOptions): WeatherBotBuilder {
+        this.botOptions = botOptions
         return this
     }
 
@@ -58,9 +65,9 @@ class WeatherBotBuilder {
 
         // build
         return if (isWebhook) {
-            PollingWeatherBot(token!!, username!!) // TODO
+            PollingWeatherBot(token!!, username!!, botOptions) // TODO
         } else {
-            PollingWeatherBot(token!!, username!!) // TODO
+            PollingWeatherBot(token!!, username!!, botOptions) // TODO
         }
     }
 }
@@ -556,10 +563,13 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 }
 
-class PollingWeatherBot(private val token: String, private val username: String) : TelegramLongPollingBot() {
+class PollingWeatherBot(private val token: String, private val username: String, defaultBotOptions: DefaultBotOptions) :
+    TelegramLongPollingBot(defaultBotOptions) {
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private val bot = WeatherBot(this)
+
+    constructor(token: String, username: String) : this(token, username, DefaultBotOptions())
 
     override fun getBotToken(): String {
         return token
@@ -570,6 +580,10 @@ class PollingWeatherBot(private val token: String, private val username: String)
     }
 
     override fun onUpdateReceived(update: Update?) {
+        handleUpdate(update)
+    }
+
+    private fun handleUpdate(update: Update?) {
         if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return
         val userId = getUser(update).id
         val completeAction = try {

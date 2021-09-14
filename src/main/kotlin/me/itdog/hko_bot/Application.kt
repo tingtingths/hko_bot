@@ -5,6 +5,7 @@ import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
+import org.telegram.telegrambots.bots.DefaultBotOptions
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 import redis.clients.jedis.JedisPool
@@ -47,6 +48,7 @@ class Application(args: Array<String>) {
 
     private var token: String
     private var username: String
+    private var httpThread: Int
     private val logger = LoggerFactory.getLogger("")
 
     init {
@@ -74,6 +76,16 @@ class Application(args: Array<String>) {
                 .desc("Bot username")
                 .hasArg()
                 .required()
+                .build()
+        )
+        options.addOption(
+            Option.builder()
+                .longOpt("http-thread")
+                .argName("Http thread count, >= 1 and <= 16")
+                .type(Int::class.java)
+                .numberOfArgs(1)
+                .desc("Thread count for bot reply http calls")
+                .hasArg()
                 .build()
         )
 
@@ -116,6 +128,7 @@ class Application(args: Array<String>) {
 
         token = cmdLn.getOptionValue("token")
         username = cmdLn.getOptionValue("username")
+        httpThread = cmdLn.getOptionValue("http-thread", "4").toInt()
         when {
             cmdLn.hasOption("redis") -> Global.persistent =
                 RedisPersistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
@@ -128,9 +141,15 @@ class Application(args: Array<String>) {
             if (cmdLine.hasOption("redis")) {
                 URI.create(cmdLine.getOptionValue("redis"))
             }
+            if (cmdLine.hasOption("http-thread")) {
+                val count = cmdLine.getOptionValue("http-thread", "4").toInt()
+                if (!(count >= 1 && count <= 16)) {
+                    throw IllegalArgumentException("http-thread $count is not between 1 and 16")
+                }
+            }
             null
         } catch (e: Exception) {
-            "Unable to parse redis uri, ${e.cause}"
+            "Unable to parse command line, ${e.message}"
         }
     }
 
@@ -145,6 +164,9 @@ class Application(args: Array<String>) {
             WeatherBotBuilder()
                 .token(token)
                 .username(username)
+                .botOptions(DefaultBotOptions().apply {
+                    maxThreads = httpThread
+                })
                 .buildPollingBot()
         )
         logger.info("Bot Started...")
