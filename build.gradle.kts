@@ -40,6 +40,7 @@ tasks.create("createBuildProperties") {
         val timestamp = SimpleDateFormat("yyyyMMddHHmmss").format(Date())
         val version = project.version.toString()
 
+        File("$buildDir/resources/main").mkdirs()
         val properties = Properties()
         properties["version"] = version
         properties["timestamp"] = timestamp
