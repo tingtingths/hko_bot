@@ -7,7 +7,10 @@ import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.DefaultBotOptions
 import org.telegram.telegrambots.meta.TelegramBotsApi
+import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook
+import org.telegram.telegrambots.meta.generics.LongPollingBot
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
+import org.telegram.telegrambots.updatesreceivers.DefaultWebhook
 import redis.clients.jedis.JedisPool
 import java.io.File
 import java.net.URI
@@ -54,6 +57,9 @@ class Application(args: Array<String>) {
 
     private var token: String
     private var username: String
+    private var webhookBaseURL: String
+    private var webhookPath: String
+    private var port: Int
     private var httpThread: Int
     private val logger = LoggerFactory.getLogger("")
 
@@ -87,7 +93,7 @@ class Application(args: Array<String>) {
         options.addOption(
             Option.builder()
                 .longOpt("http-thread")
-                .argName("Http thread count, >= 1 and <= 16")
+                .argName("Http thread count, >= 1 and <= 16. (default 4)")
                 .type(Int::class.java)
                 .numberOfArgs(1)
                 .desc("Thread count for bot reply http calls")
@@ -95,28 +101,60 @@ class Application(args: Array<String>) {
                 .build()
         )
 
-        val persistentGroup = OptionGroup().addOption(
-            Option.builder("r")
-                .longOpt("redis")
-                .argName("redis")
+        options.addOption(
+            Option.builder()
+                .longOpt("webhook-base-url")
+                .argName("Webhook base url")
                 .type(String::class.java)
                 .numberOfArgs(1)
-                .desc("Redis connection")
+                .desc("Webhook base url, provide to start the bot in webhook mode. The final url would be <webhook-url>/callback/<webhook-path>.")
                 .hasArg()
-                .required()
                 .build()
-        ).addOption(
-            Option.builder("f")
-                .longOpt("file")
-                .argName("file")
+        )
+        options.addOption(
+            Option.builder()
+                .longOpt("webhook-path")
+                .argName("Webhook url path")
                 .type(String::class.java)
                 .numberOfArgs(1)
-                .desc("Data file")
+                .desc("Webhook path, should be something random and complex to serve as a security measure. (default generated uuid)")
                 .hasArg()
-                .required()
                 .build()
-        ).apply { isRequired = true }
-        options.addOptionGroup(persistentGroup)
+        )
+        options.addOption(
+            Option.builder("p")
+                .longOpt("port")
+                .argName("Webhook port")
+                .type(Int::class.java)
+                .numberOfArgs(1)
+                .desc("Webhook port, port for the webhook http server to listen to. (default 80)")
+                .hasArg()
+                .build()
+        )
+
+        options.addOptionGroup(
+            OptionGroup().addOption(
+                Option.builder("r")
+                    .longOpt("redis")
+                    .argName("redis")
+                    .type(String::class.java)
+                    .numberOfArgs(1)
+                    .desc("Redis connection")
+                    .hasArg()
+                    .required()
+                    .build()
+            ).addOption(
+                Option.builder("f")
+                    .longOpt("file")
+                    .argName("file")
+                    .type(String::class.java)
+                    .numberOfArgs(1)
+                    .desc("Data file")
+                    .hasArg()
+                    .required()
+                    .build()
+            ).apply { isRequired = true }
+        )
 
         // parse arguments
         cmdLn = try {
@@ -134,6 +172,9 @@ class Application(args: Array<String>) {
 
         token = cmdLn.getOptionValue("token")
         username = cmdLn.getOptionValue("username")
+        webhookBaseURL = cmdLn.getOptionValue("webhook-base-url", "")
+        webhookPath = cmdLn.getOptionValue("webhook-path", UUID.randomUUID().toString())
+        port = cmdLn.getOptionValue("port", "80").toInt()
         httpThread = cmdLn.getOptionValue("http-thread", "4").toInt()
         when {
             cmdLn.hasOption("redis") -> Global.persistent =
@@ -147,9 +188,12 @@ class Application(args: Array<String>) {
             if (cmdLine.hasOption("redis")) {
                 URI.create(cmdLine.getOptionValue("redis"))
             }
+            if (cmdLine.hasOption("webhook-base-url")) {
+                URI.create(cmdLine.getOptionValue("webhook-base-url"))
+            }
             if (cmdLine.hasOption("http-thread")) {
                 val count = cmdLine.getOptionValue("http-thread", "4").toInt()
-                if (!(count >= 1 && count <= 16)) {
+                if (count !in 1..16) {
                     throw IllegalArgumentException("http-thread $count is not between 1 and 16")
                 }
             }
@@ -167,16 +211,34 @@ class Application(args: Array<String>) {
     }
 
     fun start() {
-        val botApi = TelegramBotsApi(DefaultBotSession::class.java)
-        botApi.registerBot(
-            WeatherBotBuilder()
-                .token(token)
-                .username(username)
-                .botOptions(DefaultBotOptions().apply {
-                    maxThreads = httpThread
-                })
-                .buildPollingBot()
-        )
+        val builder = WeatherBotBuilder()
+            .token(token)
+            .username(username)
+            .botOptions(DefaultBotOptions().apply {
+                maxThreads = httpThread
+            })
+
+        if (webhookBaseURL.isNotEmpty()) {
+            builder.updateType(WeatherBotBuilder.UpdateType.WEBHOOK).webhookPath(webhookPath)
+
+            val webhook = DefaultWebhook()
+            webhook.setInternalUrl("http://0.0.0.0:$port")
+
+            val setWebhook = SetWebhook.builder()
+                .url(webhookBaseURL)
+                .build()
+
+            val botApi = TelegramBotsApi(DefaultBotSession::class.java, webhook)
+            botApi.registerBot(
+                builder.build() as WebhookWeatherBot,
+                setWebhook
+            )
+        } else {
+            val botApi = TelegramBotsApi(DefaultBotSession::class.java)
+            builder.updateType(WeatherBotBuilder.UpdateType.LONG_POLL)
+            botApi.registerBot(builder.build() as LongPollingBot)
+        }
+
         logger.info("Bot Started...")
     }
 }

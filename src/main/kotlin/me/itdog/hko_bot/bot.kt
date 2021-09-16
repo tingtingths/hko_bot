@@ -11,6 +11,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.DefaultBotOptions
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
+import org.telegram.telegrambots.bots.TelegramWebhookBot
 import org.telegram.telegrambots.meta.api.methods.AnswerInlineQuery
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.send.*
@@ -35,10 +36,17 @@ enum class BotLocale {
 
 class WeatherBotBuilder {
 
+    val logger = LoggerFactory.getLogger(this::class.java)
+
+    enum class UpdateType {
+        LONG_POLL, WEBHOOK
+    }
+
     private var token: String? = null
     private var username: String? = null
-    private var isWebhook = false
+    private var webhookPath: String? = null
     private var botOptions = DefaultBotOptions()
+    private var updateType = UpdateType.LONG_POLL
 
     fun token(token: String): WeatherBotBuilder {
         this.token = token
@@ -50,25 +58,35 @@ class WeatherBotBuilder {
         return this
     }
 
+    fun webhookPath(webhookPath: String): WeatherBotBuilder {
+        this.webhookPath = webhookPath
+        return this
+    }
+
     fun botOptions(botOptions: DefaultBotOptions): WeatherBotBuilder {
         this.botOptions = botOptions
         return this
     }
 
-    fun buildPollingBot(): PollingWeatherBot {
-        isWebhook = false
-        return build() as PollingWeatherBot
+    fun updateType(updateType: UpdateType): WeatherBotBuilder {
+        this.updateType = updateType
+        return this
     }
 
-    private fun build(): TelegramBot {
-        if (token == null) throw IllegalArgumentException("Token must be supplied")
-        if (username == null) throw IllegalArgumentException("Token must be supplied")
+    fun build(): TelegramBot {
+        if (token.isNullOrEmpty()) throw IllegalArgumentException("Token must be supplied")
+        if (username.isNullOrEmpty()) throw IllegalArgumentException("Username must be supplied")
+        if (updateType == UpdateType.WEBHOOK && webhookPath.isNullOrEmpty())
+            throw IllegalArgumentException("Webhook path must be supplied")
 
         // build
-        return if (isWebhook) {
-            PollingWeatherBot(token!!, username!!, botOptions) // TODO
-        } else {
-            PollingWeatherBot(token!!, username!!, botOptions) // TODO
+        return when (updateType) {
+            UpdateType.WEBHOOK -> {
+                // parse url path
+                logger.debug("Webhook bot path=$webhookPath")
+                WebhookWeatherBot(token!!, username!!, webhookPath!!, botOptions)
+            }
+            UpdateType.LONG_POLL -> PollingWeatherBot(token!!, username!!, botOptions)
         }
     }
 }
@@ -559,27 +577,11 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 }
 
-class PollingWeatherBot(private val token: String, private val username: String, defaultBotOptions: DefaultBotOptions) :
-    TelegramLongPollingBot(defaultBotOptions) {
+class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) {
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
-    private val bot = WeatherBot(this)
 
-    constructor(token: String, username: String) : this(token, username, DefaultBotOptions())
-
-    override fun getBotToken(): String {
-        return token
-    }
-
-    override fun getBotUsername(): String {
-        return username
-    }
-
-    override fun onUpdateReceived(update: Update?) {
-        handleUpdate(update)
-    }
-
-    private fun handleUpdate(update: Update?) {
+    fun handle(update: Update?) {
         if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return
         val userId = getUser(update).id
         val completeAction = try {
@@ -599,25 +601,25 @@ class PollingWeatherBot(private val token: String, private val username: String,
         when {
             update.hasInlineQuery() -> {
                 logger.debug("($userId), inline query: ${update.inlineQuery.query}")
-                executeAsync(bot.handleInlineQuery(update)).thenRunAsync(completeAction)
+                sender.executeAsync(bot.handleInlineQuery(update)).thenRunAsync(completeAction)
             }
             update.hasMessage() -> {
                 logger.debug("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
-                executeAsync(bot.handleMessage(update)).thenRunAsync(completeAction)
+                sender.executeAsync(bot.handleMessage(update)).thenRunAsync(completeAction)
             }
             update.hasCallbackQuery() -> {
                 fun execReply(reply: BotApiMethod<*>): CompletableFuture<*> {
                     return when (reply) {
-                        is SendMessage -> executeAsync(reply)
-                        is SendDocument -> executeAsync(reply)
-                        is SendPhoto -> executeAsync(reply)
-                        is SendVideo -> executeAsync(reply)
-                        is SendVideoNote -> executeAsync(reply)
-                        is SendSticker -> executeAsync(reply)
-                        is SendAudio -> executeAsync(reply)
-                        is SendVoice -> executeAsync(reply)
-                        is SendAnimation -> executeAsync(reply)
-                        is EditMessageText -> executeAsync(reply)
+                        is SendMessage -> sender.executeAsync(reply)
+                        is SendDocument -> sender.executeAsync(reply)
+                        is SendPhoto -> sender.executeAsync(reply)
+                        is SendVideo -> sender.executeAsync(reply)
+                        is SendVideoNote -> sender.executeAsync(reply)
+                        is SendSticker -> sender.executeAsync(reply)
+                        is SendAudio -> sender.executeAsync(reply)
+                        is SendVoice -> sender.executeAsync(reply)
+                        is SendAnimation -> sender.executeAsync(reply)
+                        is EditMessageText -> sender.executeAsync(reply)
                         else -> throw Exception("Unsupported reply type $reply")
                     }
                 }
@@ -635,5 +637,55 @@ class PollingWeatherBot(private val token: String, private val username: String,
                 }
             }
         }
+    }
+}
+
+class PollingWeatherBot(private val token: String, private val username: String, defaultBotOptions: DefaultBotOptions) :
+    TelegramLongPollingBot(defaultBotOptions) {
+
+    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val bot = WeatherBot(this)
+    private val updateHandler = UpdateHandler(this, bot)
+
+    override fun getBotToken(): String {
+        return token
+    }
+
+    override fun getBotUsername(): String {
+        return username
+    }
+
+    override fun onUpdateReceived(update: Update?) {
+        updateHandler.handle(update)
+    }
+}
+
+class WebhookWeatherBot(
+    private val token: String,
+    private val username: String,
+    private val webhookPath: String,
+    defaultBotOptions: DefaultBotOptions
+) :
+    TelegramWebhookBot(defaultBotOptions) {
+
+    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val bot = WeatherBot(this)
+    private val updateHandler = UpdateHandler(this, bot)
+
+    override fun getBotToken(): String {
+        return token
+    }
+
+    override fun getBotUsername(): String {
+        return username
+    }
+
+    override fun onWebhookUpdateReceived(update: Update?): BotApiMethod<*>? {
+        updateHandler.handle(update)
+        return null
+    }
+
+    override fun getBotPath(): String {
+        return webhookPath
     }
 }
