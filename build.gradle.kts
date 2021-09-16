@@ -69,6 +69,8 @@ tasks.jar {
         }
     )
 
+    archiveFileName.set("${archiveBaseName.get()}.${archiveExtension.get()}")
+
     exclude("META-INF/*.RSA", "META-INF/*.SF", "META-INF/*.DSA")
 }
 
