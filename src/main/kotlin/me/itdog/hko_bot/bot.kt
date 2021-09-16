@@ -82,8 +82,6 @@ class WeatherBotBuilder {
         // build
         return when (updateType) {
             UpdateType.WEBHOOK -> {
-                // parse url path
-                logger.debug("Webhook bot path=$webhookPath")
                 WebhookWeatherBot(token!!, username!!, webhookPath!!, botOptions)
             }
             UpdateType.LONG_POLL -> PollingWeatherBot(token!!, username!!, botOptions)

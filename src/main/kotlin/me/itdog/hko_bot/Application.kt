@@ -233,6 +233,8 @@ class Application(args: Array<String>) {
                 builder.build() as WebhookWeatherBot,
                 setWebhook
             )
+
+            logger.info("Webhook url = $webhookBaseURL/callback/$webhookPath")
         } else {
             val botApi = TelegramBotsApi(DefaultBotSession::class.java)
             builder.updateType(WeatherBotBuilder.UpdateType.LONG_POLL)
