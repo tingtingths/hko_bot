@@ -194,19 +194,19 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 when (renderMode) {
                     RenderMode.TEXT -> {
                         ret += if (info.flw != null) "${formatFlwTime(info.flw!!)}\n\n" else ""
-                        ret += "${it.flw?.generalSituation as String}\n\n" +
-                                "${it.flw?.forecastPeriod as String}\n" +
-                                "${it.flw?.forecastDesc as String}\n\n" +
-                                "${it.flw?.outlookTitle as String}\n" +
-                                it.flw?.outlookContent as String
+                        ret += "${it.flw?.generalSituation as String? ?: ""}\n\n" +
+                                "${it.flw?.forecastPeriod ?: ""}\n" +
+                                "${it.flw?.forecastDesc ?: ""}\n\n" +
+                                "${it.flw?.outlookTitle ?: ""}\n" +
+                                (it.flw?.outlookContent ?: "")
                     }
                     RenderMode.MARKDOWN -> {
                         ret += if (info.flw != null) "_${escapeMarkdown(formatFlwTime(info.flw!!))}_\n\n" else ""
-                        ret += "${escapeMarkdown(it.flw?.generalSituation as String)}\n\n" +
-                                "__*${escapeMarkdown(it.flw?.forecastPeriod as String)}*__\n" +
-                                "${escapeMarkdown(it.flw?.forecastDesc as String)}\n\n" +
-                                "__*${escapeMarkdown(it.flw?.outlookTitle as String)}*__\n" +
-                                escapeMarkdown(it.flw?.outlookContent as String)
+                        ret += "${escapeMarkdown(it.flw?.generalSituation as String? ?: "")}\n\n" +
+                                "__*${escapeMarkdown(it.flw?.forecastPeriod ?: "")}*__\n" +
+                                "${escapeMarkdown(it.flw?.forecastDesc ?: "")}\n\n" +
+                                "__*${escapeMarkdown(it.flw?.outlookTitle ?: "")}*__\n" +
+                                escapeMarkdown(it.flw?.outlookContent ?: "")
                     }
                 }
                 ret
