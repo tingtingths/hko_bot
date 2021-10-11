@@ -755,7 +755,8 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
 
     fun handle(update: Update?) {
         if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return
-        val userId = getUser(update).id
+        val user = getUser(update)
+        val userId = user.id
         val completeAction = try {
             val chatId = getChat(update).id
             val chatSettingHash = Global.chatSettings.get(chatId).hashCode()

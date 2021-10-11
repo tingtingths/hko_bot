@@ -3,6 +3,9 @@ package me.itdog.hko_bot
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.apache.commons.cli.*
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.DefaultBotOptions
@@ -62,6 +65,7 @@ class Application(args: Array<String>) {
     private var port: Int
     private var httpThread: Int
     private val logger = LoggerFactory.getLogger("")
+    private var broadcastMessage: String? = null
 
     init {
         val parser: CommandLineParser = DefaultParser()
@@ -100,7 +104,6 @@ class Application(args: Array<String>) {
                 .hasArg()
                 .build()
         )
-
         options.addOption(
             Option.builder()
                 .longOpt("webhook-base-url")
@@ -128,6 +131,16 @@ class Application(args: Array<String>) {
                 .type(Int::class.java)
                 .numberOfArgs(1)
                 .desc("Webhook port, port for the webhook http server to listen to. (default 80)")
+                .hasArg()
+                .build()
+        )
+        options.addOption(
+            Option.builder()
+                .longOpt("broadcast")
+                .argName("Broadcast message")
+                .type(String::class.java)
+                .numberOfArgs(1)
+                .desc("Broadcast message to all users and exit")
                 .hasArg()
                 .build()
         )
@@ -176,6 +189,7 @@ class Application(args: Array<String>) {
         webhookPath = cmdLn.getOptionValue("webhook-path", UUID.randomUUID().toString())
         port = cmdLn.getOptionValue("port", "80").toInt()
         httpThread = cmdLn.getOptionValue("http-thread", "4").toInt()
+        broadcastMessage = cmdLn.getOptionValue("broadcast")
         when {
             cmdLn.hasOption("redis") -> Global.persistent =
                 RedisPersistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
@@ -197,6 +211,12 @@ class Application(args: Array<String>) {
                     throw IllegalArgumentException("http-thread $count is not between 1 and 16")
                 }
             }
+            if (cmdLine.hasOption("broadcast")) {
+                if (cmdLine.getOptionValue("broadcast") == null
+                    || cmdLine.getOptionValue("broadcast").trim().isEmpty()) {
+                    throw IllegalArgumentException("broadcast message is empty")
+                }
+            }
             null
         } catch (e: Exception) {
             "Unable to parse command line, ${e.message}"
@@ -211,6 +231,27 @@ class Application(args: Array<String>) {
     }
 
     fun start() {
+        if (broadcastMessage != null) {
+            val client = OkHttpClient()
+            var i = 0
+            val total = Global.persistent.getAllChatsSettings().size
+            Global.persistent.getAllChatsSettings().entries.forEach {
+                val chatId = it.key
+                val settings = it.value
+                val reqBody = FormBody.Builder()
+                    .add("chat_id", chatId.toString(10))
+                    .add("text", broadcastMessage!!)
+                    .build()
+                var req = Request.Builder()
+                    .url("https://api.telegram.org/bot${token}/sendMessage")
+                    .post(reqBody)
+                    .build()
+                client.newCall(req).execute().close()
+                println("(${++i}/${total}) chat_id=${chatId}")
+            }
+            exitProcess(0)
+        }
+
         val builder = WeatherBotBuilder()
             .token(token)
             .username(username)
