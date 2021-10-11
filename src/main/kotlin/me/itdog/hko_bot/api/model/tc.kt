@@ -49,4 +49,17 @@ class TropicalCyclone {
     @SerializedName("filename")
     @Expose
     var filename: String? = null
+
+    var details: TropicalCycloneDetails? = null
+}
+
+class TropicalCycloneDetails {
+
+    @SerializedName("desc")
+    @Expose
+    var desc: String? = null
+
+    @SerializedName("fcstpos_htm")
+    @Expose
+    var position: String? = null
 }

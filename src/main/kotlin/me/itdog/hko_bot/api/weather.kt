@@ -1,9 +1,8 @@
 package me.itdog.hko_bot.api
 
 import com.google.gson.Gson
-import me.itdog.hko_bot.api.model.TropicalCyclones
-import me.itdog.hko_bot.api.model.WarningInfo
-import me.itdog.hko_bot.api.model.WeatherInfo
+import com.google.gson.JsonObject
+import me.itdog.hko_bot.api.model.*
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,6 +17,8 @@ class HongKongObservatory {
         const val WARNING_URL = "http://www.hko.gov.hk/wxinfo/json/warnsumc.xml"
         const val WARNING_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/warnsum.xml"
         const val TROPICAL_CYCLONE_URL = "http://www.hko.gov.hk/wxinfo/json/tcFront.json"
+        const val TROPICAL_CYCLONE_DETAILS_URL = "http://www.hko.gov.hk/wxinfo/currwx/tc_posc_%s.json"
+        const val TROPICAL_CYCLONE_DETAILS_ENG_URL = "http://www.hko.gov.hk/wxinfo/currwx/tc_pos_%s.json"
     }
 
     private val l = LoggerFactory.getLogger(javaClass)
@@ -37,9 +38,30 @@ class HongKongObservatory {
         return gson.fromJson(body.string(), clazz)
     }
 
-    fun getTropicalCyclones(): TropicalCyclones {
+    fun getTropicalCyclones(isEnglish: Boolean = false): TropicalCyclones {
         val req = Request.Builder().url(TROPICAL_CYCLONE_URL).build()
-        return requestToObject(req, TropicalCyclones::class.java)
+        val tropicalCyclones =  requestToObject(req, TropicalCyclones::class.java)
+
+        for (tc in tropicalCyclones.values) {
+            if (tc.datatype == "F4" || tc.datatype == "F4_F3") {
+                // get details
+                var fieldName = if (isEnglish) "tc_fixarea_e_htm" else "tc_fixarea_c_htm"
+                var detailUrl = if (isEnglish) TROPICAL_CYCLONE_DETAILS_ENG_URL else TROPICAL_CYCLONE_DETAILS_URL
+                detailUrl = detailUrl.format(tc.tcId)
+                try {
+                    val detailResp = Request.Builder().url(detailUrl).build().run {
+                        client.newCall(this).execute()
+                    }
+                    val detailBody = detailResp.body ?: throw Error("Empty body response...")
+                    val jObj = gson.fromJson(detailBody.string(), JsonObject::class.java)
+                    tc.details = gson.fromJson(jObj.get(fieldName), TropicalCycloneDetails::class.java)
+                } catch (e: Exception) {
+                    l.warn("Unable to get tc details", e)
+                }
+            }
+        }
+
+        return tropicalCyclones
     }
 
     fun getGeneralInfo(isEnglish: Boolean = false): WeatherInfo {
