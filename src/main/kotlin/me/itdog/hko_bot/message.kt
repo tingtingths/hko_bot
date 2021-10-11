@@ -44,6 +44,11 @@ class QueryGraphTraveller(private val root: QueryPage) {
     private var currentPage = root
     private val BACK_BTN_CALLBACK_DATA_PREFIX = "__back__:"
 
+    private fun QueryPage.toButton(chatId: Long): InlineKeyboardButton {
+        val btn = findButton(buttonData)
+        return InlineKeyboardButton(btn.buttonText.invoke(chatId)).apply { callbackData = btn.callbackData }
+    }
+
     constructor(graph: QueryPage, queryButtons: List<QueryButton>) : this(graph) {
         this.buttons = queryButtons.stream()
             .collect(
@@ -81,13 +86,11 @@ class QueryGraphTraveller(private val root: QueryPage) {
         reply.text = button.defaultMessage
         val chatId = getChat(update).id
 
-        if (currentPage.layout.isNotEmpty()) {
-            val markupButtons = currentPage.layout
-                .map { it.buttonData }
-                .map { findButton(it) }
-                .map { InlineKeyboardButton(it.buttonText.invoke(chatId)).apply { callbackData = it.callbackData } }
-                .map { listOf(it) }
-            reply.replyMarkup = InlineKeyboardMarkup(markupButtons)
+        val layout = currentPage.renderLayout(chatId)
+        if (layout.isNotEmpty()) {
+            reply.replyMarkup = InlineKeyboardMarkup(layout.map { row ->
+                row.map { it.toButton(chatId) }
+            })
         }
 
         return reply
@@ -97,15 +100,13 @@ class QueryGraphTraveller(private val root: QueryPage) {
         // build buttons
         val markupButtons = mutableListOf<List<InlineKeyboardButton>>()
         // has declared buttons
-        if (page.layout.isNotEmpty()) {
-            page.layout
-                .asSequence()
-                .map { it.buttonData }
-                .map { findButton(it) }
-                .map { InlineKeyboardButton(it.buttonText.invoke(chatId)).apply { callbackData = it.callbackData } }
-                .map { listOf(it) }
-                .toCollection(markupButtons)
+        val layout = page.renderLayout(chatId)
+        if (layout.isNotEmpty()) {
+            layout.map { row ->
+                row.map { it.toButton(chatId) }
+            }.toCollection(markupButtons)
         }
+
         // add back button if not at home
         val parent = findParent(page.buttonData, root)
         if (parent != null) {
@@ -207,24 +208,33 @@ class QueryGraphTraveller(private val root: QueryPage) {
 
     private fun findParent(callbackData: String, page: QueryPage = root): QueryPage? {
         if (page.buttonData == callbackData) return null
-        if (page.layout.isEmpty()) return null
-        var found = page.layout.find { it.buttonData == callbackData }
-        if (found != null) {
-            return page
+        val layout = page.renderLayout(null)
+        if (layout.isEmpty()) return null
+        for (row in layout) {
+            for (child in row) {
+                if (child.buttonData == callbackData) {
+                    return page
+                }
+            }
         }
-        for (child in page.layout) {
-            found = findParent(callbackData, child)
-            if (found != null) return found
+        for (row in layout) {
+            for (child in row) {
+                val found = findParent(callbackData, child)
+                if (found != null) return found
+            }
         }
         return null
     }
 
     private fun findPage(callbackData: String, page: QueryPage = root): QueryPage? {
         if (page.buttonData == callbackData) return page
-        if (page.layout.isEmpty()) return null
-        for (child in page.layout) {
-            val found = findPage(callbackData, child)
-            if (found != null) return found
+        val layout = page.renderLayout(null)
+        if (layout.isEmpty()) return null
+        for (row in layout) {
+            for (child in row) {
+                val found = findPage(callbackData, child)
+                if (found != null) return found
+            }
         }
         return null
     }
@@ -235,7 +245,12 @@ class QueryGraphTraveller(private val root: QueryPage) {
 }
 
 class QueryPage(val buttonData: String) {
-    val layout: MutableList<QueryPage> = mutableListOf()
+    private val layout: MutableList<QueryPage> = mutableListOf()
+    var renderLayout: (Long?) -> List<List<QueryPage>> = {
+        layout.map {
+            listOf(it)
+        }
+    }
 
     fun addItems(vararg options: QueryPage): QueryPage {
         layout.addAll(options)
