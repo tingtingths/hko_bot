@@ -23,7 +23,10 @@ class Flw {
 
     @SerializedName("TCInfo")
     @Expose
-    var tCInfo: Any? = null
+    var tCInfo: String? = null
+        get() {
+            return if (field == null) field else Util.htmlExtractText(field as String)
+        }
 
     @SerializedName("FireDangerWarning")
     @Expose

@@ -166,6 +166,18 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
     inner class WeatherMessageComposer(private val localiser: Localiser) {
 
+        private fun String?.pad(prefix: String = "", suffix: String = ""): String {
+            if (this != null && this.isNotEmpty()) {
+                return "$prefix$this$suffix"
+            }
+            return this ?: ""
+        }
+
+        private fun String?.escapeMarkdown(): String? {
+            if (this != null) return escapeMarkdown(this)
+            return this
+        }
+
         private fun formatFlwTime(flw: Flw): String {
             return formatBulletinDateTime(flw.bulletinDate, flw.bulletinTime)
         }
@@ -191,19 +203,8 @@ open class WeatherBot(val telegramBot: AbsSender) {
         }
 
         fun composeGeneralWeatherInfo(info: WeatherInfo, renderMode: RenderMode = RenderMode.TEXT): String {
-            fun String?.pad(prefix: String = "", suffix: String = ""): String {
-                if (this != null && this.isNotEmpty()) {
-                    return "$prefix$this$suffix"
-                }
-                return this ?: ""
-            }
-
-            fun String?.escapeMarkdown(): String? {
-                if (this != null) return escapeMarkdown(this)
-                return this
-            }
-
             return info.let {
+                val flw = it.flw
                 var ret = ""
                 when (renderMode) {
                     RenderMode.TEXT -> {
@@ -211,24 +212,64 @@ open class WeatherBot(val telegramBot: AbsSender) {
                             formatFlwTime(info.flw!!).pad("\n\n")
                         else
                             ""
-                        ret += it.flw?.generalSituation.pad(suffix = "\n\n") +
-                                it.flw?.forecastPeriod.pad(suffix = "\n") +
-                                it.flw?.forecastDesc.pad(suffix = "\n\n") +
-                                it.flw?.outlookTitle.pad(suffix = "\n") +
-                                (it.flw?.outlookContent ?: "")
+                        ret += flw?.generalSituation.pad(suffix = "\n\n") +
+                                flw?.tCInfo.pad(suffix = "\n\n") +
+                                flw?.forecastPeriod.pad(suffix = "\n") +
+                                flw?.forecastDesc.pad(suffix = "\n\n") +
+                                flw?.outlookTitle.pad(suffix = "\n") +
+                                (flw?.outlookContent ?: "")
                     }
                     RenderMode.MARKDOWN -> {
                         ret += if (info.flw != null)
                             formatFlwTime(info.flw!!).escapeMarkdown().pad("_", "_\n\n")
                         else
                             ""
-                        ret += it.flw?.generalSituation.escapeMarkdown().pad(suffix = "\n\n") +
-                                it.flw?.forecastPeriod.escapeMarkdown().pad("__*", "*__\n") +
-                                it.flw?.forecastDesc.escapeMarkdown().pad(suffix = "\n\n") +
-                                it.flw?.outlookTitle.escapeMarkdown().pad("__*", "*__\n") +
-                                it.flw?.outlookContent.escapeMarkdown()
+                        ret += flw?.generalSituation.escapeMarkdown().pad(suffix = "\n\n") +
+                                flw?.tCInfo.escapeMarkdown().pad(suffix = "\n\n") +
+                                flw?.forecastPeriod.escapeMarkdown().pad("__*", "*__\n") +
+                                flw?.forecastDesc.escapeMarkdown().pad(suffix = "\n\n") +
+                                flw?.outlookTitle.escapeMarkdown().pad("__*", "*__\n") +
+                                flw?.outlookContent.escapeMarkdown()
                     }
                 }
+                ret
+            }
+        }
+
+        fun composeNineDaysForecast(info: WeatherInfo, renderMode: RenderMode = RenderMode.TEXT): String {
+            return info.let {
+                val f9d = it.f9d
+                var ret = ""
+                val inputFormat = SimpleDateFormat("yyyyMMdd")
+                val outputFormat = localiser.simpleDateFormat("(EEE) yyyy-MM-dd")
+
+                when (renderMode) {
+                    RenderMode.TEXT -> {
+                        if (f9d?.weatherForecast != null) {
+                            for (forecast in f9d.weatherForecast!!) {
+                                val date = inputFormat.parse(forecast.forecastDate)
+                                ret += outputFormat.format(date).pad("\n\n", "\n") +
+                                        "${localiser.get(LocaliseComponent.TEMPERATURE)}: ${forecast.forecastMintemp}°C - ${forecast.forecastMaxtemp}°C\n" +
+                                        "${localiser.get(LocaliseComponent.RELATIVE_HUMIDITY)}: ${forecast.forecastMinrh}% - ${forecast.forecastMaxrh}%\n" +
+                                        "${forecast.forecastWeather} ${forecast.forecastWind}"
+                            }
+                        }
+                    }
+                    RenderMode.MARKDOWN -> {
+                        if (f9d?.weatherForecast != null) {
+                            for (forecast in f9d.weatherForecast!!) {
+                                val date = inputFormat.parse(forecast.forecastDate)
+                                ret += outputFormat.format(date).escapeMarkdown().pad("\n\n__*", "*__\n") +
+                                        "${localiser.get(LocaliseComponent.TEMPERATURE)}: ${forecast.forecastMintemp}°C - ${forecast.forecastMaxtemp}°C".escapeMarkdown()
+                                            .pad(suffix = "\n") +
+                                        "${localiser.get(LocaliseComponent.RELATIVE_HUMIDITY)}: ${forecast.forecastMinrh}% - ${forecast.forecastMaxrh}%".escapeMarkdown()
+                                            .pad(suffix = "\n") +
+                                        "${forecast.forecastWeather} ${forecast.forecastWind}".escapeMarkdown()
+                            }
+                        }
+                    }
+                }
+
                 ret
             }
         }
@@ -327,6 +368,18 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
         fun get(localiseComponent: LocaliseComponent, botLocale: BotLocale = this.botLocale): String {
             return localisations[botLocale]?.get(localiseComponent) ?: "NO_MESSAGE_FOUND"
+        }
+
+        fun simpleDateFormat(fmt: String, botLocale: BotLocale = this.botLocale): SimpleDateFormat {
+            val locale = when (botLocale) {
+                BotLocale.EN_UK -> {
+                    Locale.ENGLISH
+                }
+                BotLocale.ZH_HK -> {
+                    Locale.TRADITIONAL_CHINESE
+                }
+            }
+            return SimpleDateFormat(fmt, locale)
         }
     }
 
@@ -447,7 +500,18 @@ open class WeatherBot(val telegramBot: AbsSender) {
         queryButtons["9_day_forecast"] = QueryButton(
             { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.NINE_DAYS_FORECAST_BTN) },
             "9_day_forecast"
-        )
+        ).apply {
+            buildMessage = {
+                val chatId = getChat(it).id
+                val locale = getChatLocale(chatId)
+                val msg = composers[locale]!!.composeNineDaysForecast(requestGeneralInfo(locale), RenderMode.MARKDOWN)
+                println(msg)
+                Pair(
+                    ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
+                    msg
+                )
+            }
+        }
         queryButtons["others"] = QueryButton(
             { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.OTHERS_BTN) },
             "others"
@@ -494,7 +558,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 val buttons = mutableListOf(
                     QueryPage("current_weather"),
                     QueryPage("general_weather"),
-                    //QueryPage("9_day_forecast"), // TODO - implement 9 days
+                    QueryPage("9_day_forecast"),
                     QueryPage("active_warnings"),
                 )
 

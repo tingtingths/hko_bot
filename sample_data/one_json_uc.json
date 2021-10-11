@@ -1,0 +1,355 @@
+{
+  "FLW": {
+    "BulletinDate": "20211011",
+    "BulletinTime": "0945",
+    "GeneralSituation": "一股<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0464')\">乾燥<\/a>的東北<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0277')\">季候風<\/a>正影響華南。預料受其與<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0278')\">熱帶氣旋<\/a><a title=\"在新視窗顯示\" href=\"javascript:Wxword('tc')\">圓規<\/a>共同影響下，廣東沿岸今日風勢會逐漸增強。",
+    "TCInfo": "<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0281')\">熱帶風暴<\/a><a title=\"在新視窗顯示\" href=\"javascript:Wxword('tc')\">圓規<\/a>已增強為<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0280')\">強烈熱帶風暴<\/a>。在上午十時，<a title=\"在新視窗顯示\" href=\"javascript:Wxword('tc')\">圓規<\/a>集結在馬尼拉之東北約560公里，預料向西移動，時速約22公里，移向呂宋海峽。",
+    "FireDangerWarning": null,
+    "ForecastPeriod": "本港地區今日天氣預測",
+    "ForecastDesc": "<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0244')\">天晴<\/a><a title=\"在新視窗顯示\" href=\"javascript:Wxword('0464')\">乾燥<\/a>。吹<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0285')\">和緩<\/a>至<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0286')\">清勁<\/a>偏北風，離岸及高地間中吹<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0287')\">強風<\/a>。海有<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0481')\">湧浪<\/a>。",
+    "OutlookTitle": "展望",
+    "OutlookContent": "未來一兩天風勢頗大，有大雨及<a title=\"在新視窗顯示\" href=\"javascript:Wxword('0258')\">狂風<\/a>。",
+    "Icon1": "50",
+    "Icon2": null
+  },
+  "CMN": {
+    "SolarTerm": null,
+    "PublicHoliday": null,
+    "GregorianDate": "20211011",
+    "LunarDate": "辛丑, 牛年九月初六日",
+    "sunriseTime": "06:18",
+    "sunsetTime": "18:02",
+    "moonriseTime": "11:11",
+    "moonsetTime": "22:07",
+    "forecastDate": "20211011",
+    "tide": [
+      {
+        "type": "退潮",
+        "time": "06:35",
+        "height": "0.8"
+      },
+      {
+        "type": "漲潮",
+        "time": "14:08",
+        "height": "1.7"
+      },
+      {
+        "type": "退潮",
+        "time": "17:43",
+        "height": "1.5"
+      },
+      {
+        "type": "漲潮",
+        "time": ":",
+        "height": ""
+      }
+    ]
+  },
+  "F9D": {
+    "BulletinDate": "20211011",
+    "BulletinTime": "0950",
+    "NPTemp": "28",
+    "GeneralSituation": "乾燥的東北季候風會在今日為華南帶來普遍晴朗的天氣。熱帶氣旋圓規會在今明兩日移向呂宋海峽，並預料在本週中期橫過南海北部，受其與東北季候風的共同影響，廣東沿岸風勢再度增強，有大雨及狂風。隨著圓規遠離廣東沿岸，本週後期該區天氣稍為好轉。",
+    "WeatherForecast": [
+      {
+        "ForecastDate": "20211011",
+        "ForecastWind": "北風4至5級，離岸及高地間中6級。",
+        "ForecastWeather": "天晴乾燥。海有湧浪。",
+        "ForecastMaxtemp": "31",
+        "ForecastMintemp": "24",
+        "ForecastMaxrh": "85",
+        "ForecastMinrh": "55",
+        "ForecastIcon": "pic50.png",
+        "PSR": "低",
+        "IconDesc": "陽光充沛",
+        "WeekDay": "1"
+      },
+      {
+        "ForecastDate": "20211012",
+        "ForecastWind": "北至東北風5級，離岸及高地6至7級。",
+        "ForecastWeather": "日間短暫時間有陽光及乾燥。稍後有幾陣狂風驟雨。",
+        "ForecastMaxtemp": "28",
+        "ForecastMintemp": "24",
+        "ForecastMaxrh": "90",
+        "ForecastMinrh": "55",
+        "ForecastIcon": "pic52.png",
+        "PSR": "中",
+        "IconDesc": "短暫陽光",
+        "WeekDay": "2"
+      },
+      {
+        "ForecastDate": "20211013",
+        "ForecastWind": "東至東北風6級，離岸及高地達8級。",
+        "ForecastWeather": "多雲，有狂風驟雨及雷暴，雨勢有時頗大。",
+        "ForecastMaxtemp": "26",
+        "ForecastMintemp": "24",
+        "ForecastMaxrh": "95",
+        "ForecastMinrh": "85",
+        "ForecastIcon": "pic64.png",
+        "PSR": "高",
+        "IconDesc": "大雨",
+        "WeekDay": "3"
+      },
+      {
+        "ForecastDate": "20211014",
+        "ForecastWind": "東至東北風5至6級，初時離岸及高地間中7級。",
+        "ForecastWeather": "大致多雲，間中有狂風驟雨及雷暴。初時雨勢有時頗大。",
+        "ForecastMaxtemp": "27",
+        "ForecastMintemp": "24",
+        "ForecastMaxrh": "95",
+        "ForecastMinrh": "80",
+        "ForecastIcon": "pic63.png",
+        "PSR": "高",
+        "IconDesc": "雨",
+        "WeekDay": "4"
+      },
+      {
+        "ForecastDate": "20211015",
+        "ForecastWind": "東至東北風4至5級，離岸間中6級。",
+        "ForecastWeather": "大致多雲，間中有驟雨。稍後驟雨減少。",
+        "ForecastMaxtemp": "28",
+        "ForecastMintemp": "25",
+        "ForecastMaxrh": "95",
+        "ForecastMinrh": "80",
+        "ForecastIcon": "pic63.png",
+        "PSR": "中高",
+        "IconDesc": "雨",
+        "WeekDay": "5"
+      },
+      {
+        "ForecastDate": "20211016",
+        "ForecastWind": "東至東北風4至5級，離岸間中6級。",
+        "ForecastWeather": "大致多雲，初時有幾陣驟雨。日間短暫時間有陽光。",
+        "ForecastMaxtemp": "28",
+        "ForecastMintemp": "24",
+        "ForecastMaxrh": "90",
+        "ForecastMinrh": "70",
+        "ForecastIcon": "pic54.png",
+        "PSR": "低",
+        "IconDesc": "短暫陽光，有驟雨",
+        "WeekDay": "6"
+      },
+      {
+        "ForecastDate": "20211017",
+        "ForecastWind": "東至東北風4至5級，離岸間中6級。",
+        "ForecastWeather": "大致多雲。日間短暫時間有陽光。",
+        "ForecastMaxtemp": "27",
+        "ForecastMintemp": "23",
+        "ForecastMaxrh": "90",
+        "ForecastMinrh": "70",
+        "ForecastIcon": "pic52.png",
+        "PSR": "低",
+        "IconDesc": "短暫陽光",
+        "WeekDay": "0"
+      },
+      {
+        "ForecastDate": "20211018",
+        "ForecastWind": "東至東北風4至5級，離岸間中6級。",
+        "ForecastWeather": "大致多雲，有一兩陣驟雨。",
+        "ForecastMaxtemp": "26",
+        "ForecastMintemp": "23",
+        "ForecastMaxrh": "90",
+        "ForecastMinrh": "75",
+        "ForecastIcon": "pic62.png",
+        "PSR": "低",
+        "IconDesc": "微雨",
+        "WeekDay": "1"
+      },
+      {
+        "ForecastDate": "20211019",
+        "ForecastWind": "東至東北風4至5級，離岸間中6級。",
+        "ForecastWeather": "大致多雲，有幾陣驟雨。",
+        "ForecastMaxtemp": "26",
+        "ForecastMintemp": "23",
+        "ForecastMaxrh": "95",
+        "ForecastMinrh": "75",
+        "ForecastIcon": "pic62.png",
+        "PSR": "低",
+        "IconDesc": "微雨",
+        "WeekDay": "2"
+      }
+    ]
+  },
+  "RHRREAD": {
+    "BulletinDate": "20211011",
+    "BulletinTime": "1002",
+    "UVIndex": "4",
+    "Intensity": "中等",
+    "hkotemp": "29",
+    "hkorh": "68",
+    "FormattedObsTime": "上午10 時"
+  },
+  "SWT": {
+    "headLine1": "現時香港受東北季候風影響，天色良好。另一方面，按照現時預測路徑，熱帶氣旋圓規會在今日（10月11日）橫過呂宋海峽，晚間進入香港800公里範圍內，屆時天文台會發出熱帶氣旋警告信號。在圓規與東北季候風的共同影響下，華... (11-10-2021 09:30)",
+    "headLine2": "",
+    "headLine3": "",
+    "headLine4": "",
+    "headLine5": "",
+    "smsSwt": "",
+    "tornadoReport": "",
+    "waterspoutReport": "",
+    "gustForecast": "",
+    "hotAdvisory": ""
+  },
+  "Playlist": [
+    {
+      "title": "天氣廣播站",
+      "subtitle": "香港天文台的早晨電視天氣節目逢星期一至六，上午約七時及八時更新，星期日上午約八時更新，而黃昏節目逢星期一至五下午約六時更新，旨在提供一個親切溝通渠道，讓市民了解天氣變化。由於天氣瞬息萬變，欲知最新天氣資訊，請瀏覽香港天文台網頁：https:\/\/www.weather.gov.hk 或 https:\/\/www.hko.gov.hk。",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGUvYi7y2oD6f9OKFVGeutUO",
+      "updated": "2021-10-11T00:00:01Z",
+      "entry_1_title": "早晨天氣節目(10月11日上午8時) - 科學主任梁麗儷",
+      "entry_1_content": "香港天文台的早晨電視天氣節目逢星期一至六，上午約七時及八時更新，星期日上午約八時更新，而黃昏節目逢星期一至五下午約六時更新，旨在提供一個親切溝通渠道，讓市民了解天氣變化。由於天氣瞬息萬變，欲知最新天氣資訊，請瀏覽香港天文台網頁：https:\/\/www.weather.gov.hk 或 https:\/\/www.hko.gov.hk。",
+      "entry_1_href": "http:\/\/www.youtube.com\/watch?v=eLgK8QpsloM&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/eLgK8QpsloM\/hqdefault.jpg",
+      "uploaded": "2021-10-11T00:00:01Z",
+      "langDesc": "",
+      "hTimeWithin": "10800000"
+    },
+    {
+      "title": "氣象冷知識",
+      "subtitle": "",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGVuK7fZUxHKzv51Y_2hy_hW",
+      "updated": "2021-10-08T10:30:00Z",
+      "entry_1_title": "低碳生活你都得(2020)",
+      "entry_1_content": "人類活動排放的溫室氣體是導致全球暖化的主因。在日常生活中我們可以怎樣減少碳排放，從而減緩暖化速度呢？由天文台與香港知專設計學院同學聯合製作的第三百六十集《氣象冷知識》，為大家詳細介紹。",
+      "entry_1_href": "https:\/\/www.youtube.com\/watch?v=2UfmIx5uQNY&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/2UfmIx5uQNY\/hqdefault.jpg",
+      "uploaded": "2021-10-08T10:30:00Z",
+      "langDesc": "",
+      "hTimeWithin": "10800000"
+    },
+    {
+      "title": "新聞發佈會",
+      "subtitle": "基於互聯網流量的限制，天文台上載片段或用戶下載片段有時可能需要較長時間。使用者應留意片段內容的時效。惡劣天氣採取應變措施時，應以香港天文台所發放的最新天氣預報和警告為準：http:\/\/www.weather.gov.hk\/",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGUUTScwNU-egaRtvNbx9dsk",
+      "updated": "2021-10-10T08:22:14Z",
+      "entry_1_title": "新聞發佈會(10月10日中午12時) - 高級科學主任林靜芝",
+      "entry_1_content": "",
+      "entry_1_href": "http:\/\/www.youtube.com\/watch?v=XudYP10UqIQ&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/XudYP10UqIQ\/hqdefault.jpg",
+      "uploaded": "2021-10-10T08:22:14Z",
+      "langDesc": "",
+      "hTimeWithin": "10800000"
+    },
+    {
+      "title": "天文台消息",
+      "subtitle": "",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGX1EWW54Zt7XN8kFf5NQ-wb",
+      "updated": "2021-03-23T11:11:57Z",
+      "entry_1_title": "天文台台長新聞簡報會（23\/3\/2021）",
+      "entry_1_content": "香港天文台台長鄭楚明博士於新聞簡報會上，回顧2020年的天氣狀況，並闡述對2021年本港天氣的展望，以及介紹天文台的最新發展。",
+      "entry_1_href": "http:\/\/www.youtube.com\/watch?v=Z10iE4knQrU&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/Z10iE4knQrU\/hqdefault.jpg",
+      "uploaded": "2021-03-23T11:11:57Z",
+      "langDesc": "",
+      "hTimeWithin": "1800000"
+    },
+    {
+      "title": "天文台網上課程",
+      "subtitle": "香港天文台的網上課程，為大家撮要講解基本天氣觀測的方法和技巧，例如辨別雲的種類、了解各種天氣現象和災害、解讀天氣圖，以及使用「我的天文台」手機應用程式分析雨勢等。課程以短片形式推出，每一課約5分鐘，由經驗豐富的天文台氣象人員主講（粵語）。",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGW08z8E5K-dAep9Pueobkyy",
+      "updated": "2020-07-29T01:13:25Z",
+      "entry_1_title": "「天氣觀測網上課程」：儀器篇 - 風速計和氣壓計（完結篇）",
+      "entry_1_content": "「天氣觀測網上課程」的第十三集短片會講解風速計和氣壓計的設計和測量原理，以及風和氣壓的關係。「天氣觀測網上課程」的網址為： https:\/\/url.hko.hk\/ovcWxObs",
+      "entry_1_href": "http:\/\/www.youtube.com\/watch?v=RD0TGaZf-IM&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/RD0TGaZf-IM\/hqdefault.jpg",
+      "uploaded": "2020-07-29T01:13:25Z",
+      "langDesc": "",
+      "hTimeWithin": "10800000"
+    },
+    {
+      "title": "天文台部門短片",
+      "subtitle": "",
+      "href": "http:\/\/www.youtube.com\/playlist?list=PLBdhEGSPvUGVTRWiBSu7_BBwSOvxlwWB-",
+      "updated": "2021-03-22T06:19:12Z",
+      "entry_1_title": "天文台部門短片 (更新於2021年)",
+      "entry_1_content": "天文台推出宣傳短片，以七個英文字母「SCIENCE」（科學） 連成一起的核心價值 ( 竭誠服務、用心關懷、靈活創新、熱誠不懈、培育傳承、群策群力及追求卓越 ) ，向公眾介紹天文台的發展和服務。",
+      "entry_1_href": "http:\/\/www.youtube.com\/watch?v=D-lf2hL3P8Y&rel=0&autoplay=1",
+      "entry_1_thumbnail": "https:\/\/i.ytimg.com\/vi\/D-lf2hL3P8Y\/hqdefault.jpg",
+      "uploaded": "2021-03-22T06:19:12Z",
+      "langDesc": "",
+      "hTimeWithin": "10800000"
+    }
+  ],
+  "FUV": {
+    "BulletinDate": "",
+    "BulletinTime": "",
+    "ForecastTimeInfoMaxUV": "",
+    "ForecastTimeInfoMaxUvCategory": "",
+    "ForecastTimeInfoDate": "",
+    "Message": ""
+  },
+  "lightning_info": [
+    {
+      "date": "11-Oct-2021",
+      "time": "10:00-10:04",
+      "color": "#808080"
+    },
+    {
+      "date": "11-Oct-2021",
+      "time": "10:05-10:09",
+      "color": "#004080"
+    },
+    {
+      "date": "11-Oct-2021",
+      "time": "10:10-10:14",
+      "color": "#8000FF"
+    },
+    {
+      "date": "11-Oct-2021",
+      "time": "10:15-10:19",
+      "color": "#00FFFF"
+    },
+    {
+      "date": "11-Oct-2021",
+      "time": "10:20-10:24",
+      "color": "#DD6F00"
+    },
+    {
+      "date": "11-Oct-2021",
+      "time": "10:25-10:29",
+      "color": "#FF0000"
+    }
+  ],
+  "header": {
+    "festival_code": "",
+    "solar_term_code": "",
+    "dateTimeDisplay_uc": "2021年10月11日 (一)",
+    "dateTimeDisplay_en": "11 Oct 2021 (Mon)",
+    "lunar_date_uc": "辛丑, 牛年九月初六日",
+    "solar_term_uc": "",
+    "solar_term_en": "",
+    "publicholiday_uc": "",
+    "publicholiday_en": ""
+  },
+  "hko": {
+    "BulletinTime": "202110111020",
+    "Temperature": "29.1",
+    "RH": "67",
+    "HomeMaxTemperature": "31",
+    "HomeMinTemperature": "24"
+  },
+  "fcartoon": {
+    "BulletinDate": "20211011",
+    "BulletinTime": "0745",
+    "Icon1": "50",
+    "Icon2": null
+  },
+  "currwx": {
+    "btime": "202110111020",
+    "temp": "29.1",
+    "rh": "67"
+  },
+  "ahko": {
+    "date": "20210511",
+    "time": "1930",
+    "content": "",
+    "heading": "",
+    "refimg": ""
+  },
+  "UVindex15min": {
+    "recordTime": "201907181545",
+    "value": 3
+  },
+  "s": "p"
+}

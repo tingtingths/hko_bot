@@ -2,7 +2,10 @@ package me.itdog.hko_bot.api
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import me.itdog.hko_bot.api.model.*
+import me.itdog.hko_bot.api.model.TropicalCycloneDetails
+import me.itdog.hko_bot.api.model.TropicalCyclones
+import me.itdog.hko_bot.api.model.WarningInfo
+import me.itdog.hko_bot.api.model.WeatherInfo
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,7 +43,7 @@ class HongKongObservatory {
 
     fun getTropicalCyclones(isEnglish: Boolean = false): TropicalCyclones {
         val req = Request.Builder().url(TROPICAL_CYCLONE_URL).build()
-        val tropicalCyclones =  requestToObject(req, TropicalCyclones::class.java)
+        val tropicalCyclones = requestToObject(req, TropicalCyclones::class.java)
 
         for (tc in tropicalCyclones.values) {
             if (tc.datatype == "F4" || tc.datatype == "F4_F3") {
