@@ -189,24 +189,41 @@ open class WeatherBot(val telegramBot: AbsSender) {
         }
 
         fun composeGeneralWeatherInfo(info: WeatherInfo, renderMode: RenderMode = RenderMode.TEXT): String {
+            fun String?.pad(prefix: String = "", suffix: String = ""): String {
+                if (this != null && this.isNotEmpty()) {
+                    return "$prefix$this$suffix"
+                }
+                return this ?: ""
+            }
+            fun String?.escapeMarkdown(): String? {
+                if (this != null) return escapeMarkdown(this)
+                return this
+            }
+
             return info.let {
                 var ret = ""
                 when (renderMode) {
                     RenderMode.TEXT -> {
-                        ret += if (info.flw != null) "${formatFlwTime(info.flw!!)}\n\n" else ""
-                        ret += "${it.flw?.generalSituation as String? ?: ""}\n\n" +
-                                "${it.flw?.forecastPeriod ?: ""}\n" +
-                                "${it.flw?.forecastDesc ?: ""}\n\n" +
-                                "${it.flw?.outlookTitle ?: ""}\n" +
+                        ret += if (info.flw != null)
+                            formatFlwTime(info.flw!!).pad("\n\n")
+                        else
+                            ""
+                        ret += it.flw?.generalSituation.pad(suffix = "\n\n") +
+                                it.flw?.forecastPeriod.pad(suffix = "\n") +
+                                it.flw?.forecastDesc.pad(suffix = "\n\n") +
+                                it.flw?.outlookTitle.pad(suffix = "\n") +
                                 (it.flw?.outlookContent ?: "")
                     }
                     RenderMode.MARKDOWN -> {
-                        ret += if (info.flw != null) "_${escapeMarkdown(formatFlwTime(info.flw!!))}_\n\n" else ""
-                        ret += "${escapeMarkdown(it.flw?.generalSituation as String? ?: "")}\n\n" +
-                                "__*${escapeMarkdown(it.flw?.forecastPeriod ?: "")}*__\n" +
-                                "${escapeMarkdown(it.flw?.forecastDesc ?: "")}\n\n" +
-                                "__*${escapeMarkdown(it.flw?.outlookTitle ?: "")}*__\n" +
-                                escapeMarkdown(it.flw?.outlookContent ?: "")
+                        ret += if (info.flw != null)
+                            formatFlwTime(info.flw!!).escapeMarkdown().pad("_", "_\n\n")
+                        else
+                            ""
+                        ret += it.flw?.generalSituation.escapeMarkdown().pad(suffix = "\n\n") +
+                                it.flw?.forecastPeriod.escapeMarkdown().pad("__*", "*__\n") +
+                                it.flw?.forecastDesc.escapeMarkdown().pad(suffix = "\n\n") +
+                                it.flw?.outlookTitle.escapeMarkdown().pad("__*", "*__\n") +
+                                it.flw?.outlookContent.escapeMarkdown()
                     }
                 }
                 ret

@@ -16,7 +16,7 @@ class Flw {
 
     @SerializedName("GeneralSituation")
     @Expose
-    var generalSituation: Any? = null
+    var generalSituation: String? = null
         get() {
             return if (field == null) field else Util.htmlExtractText(field as String)
         }
