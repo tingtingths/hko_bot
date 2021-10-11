@@ -4,9 +4,7 @@ import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import me.itdog.hko_bot.api.HongKongObservatory
-import me.itdog.hko_bot.api.model.Flw
-import me.itdog.hko_bot.api.model.WarningInfo
-import me.itdog.hko_bot.api.model.WeatherInfo
+import me.itdog.hko_bot.api.model.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.DefaultBotOptions
@@ -25,6 +23,7 @@ import org.telegram.telegrambots.meta.generics.TelegramBot
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.stream.Collectors
 import kotlin.concurrent.fixedRateTimer
@@ -130,6 +129,8 @@ fun formatBulletinDateTime(date: String?, time: String?): String {
 
 open class WeatherBot(val telegramBot: AbsSender) {
 
+    private val TROPICAL_CYCLONE_BTN_PREFIX = "tc_"
+
     enum class RenderMode {
         TEXT, MARKDOWN
     }
@@ -141,6 +142,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
         ABOUT_BTN,
         LANGUAGE_BTN,
         SETTINGS_BTN,
+        TROPICAL_CYCLONE_BTN,
         NINE_DAYS_FORECAST_BTN,
         OTHERS_BTN,
         NOTIFICATION_BTN,
@@ -195,6 +197,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 }
                 return this ?: ""
             }
+
             fun String?.escapeMarkdown(): String? {
                 if (this != null) return escapeMarkdown(this)
                 return this
@@ -249,6 +252,24 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 }
             }
         }
+
+        fun composeTropicalCycloneMessage(tc: TropicalCyclone): String {
+            val TC_DATATYPE_F4 = "F4";
+            val TC_DATATYPE_F3 = "F3";
+            val TC_DATATYPE_F3_F4 = "F3_F4";
+
+            return when (tc.datatype) {
+                TC_DATATYPE_F3_F4, TC_DATATYPE_F4 -> {
+                    "http://www.hko.gov.hk/wxinfo/currwx/fp_${tc.tcId}.png"
+                }
+                TC_DATATYPE_F3 -> {
+                    "http://www.hko.gov.hk/probfcst/${tc.filename}"
+                }
+                else -> {
+                    ""
+                }
+            }
+        }
     }
 
     inner class Localiser(private val botLocale: BotLocale) {
@@ -276,6 +297,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 Pair(LocaliseComponent.OTHERS_BTN, "其他"),
                 Pair(LocaliseComponent.ENABLED, "已啟用"),
                 Pair(LocaliseComponent.DISABLED, "已停用"),
+                Pair(LocaliseComponent.TROPICAL_CYCLONE_BTN, "熱帶氣旋"),
             )
             localisations[BotLocale.EN_UK] = mapOf(
                 Pair(LocaliseComponent.ACTIVE_WARN_BTN, "Weather Warnings"),
@@ -299,6 +321,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 Pair(LocaliseComponent.OTHERS_BTN, "Others"),
                 Pair(LocaliseComponent.ENABLED, "Enabled"),
                 Pair(LocaliseComponent.DISABLED, "Disabled"),
+                Pair(LocaliseComponent.TROPICAL_CYCLONE_BTN, "Tropical Cyclones"),
             )
         }
 
@@ -312,6 +335,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
         GENERAL_INFO_ENG,
         WARNING_INFO,
         WARNING_INFO_ENG,
+        TROPICAL_CYCLONE
     }
 
     enum class Command(val command: String) {
@@ -320,16 +344,31 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
     private val api = HongKongObservatory()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
-    private val cache: LoadingCache<Cache, Any> = CacheBuilder.newBuilder()
+    private val apiCache: LoadingCache<Cache, Any> = CacheBuilder.newBuilder()
         .expireAfterWrite(1, TimeUnit.MINUTES)
         .build(CacheLoader.from { key ->
-            if (Cache.GENERAL_INFO == key || Cache.GENERAL_INFO_ENG == key) {
-                api.getGeneralInfo(isEnglish = Cache.GENERAL_INFO_ENG == key)
-            } else {
-                api.getWarningInfo(isEnglish = Cache.WARNING_INFO_ENG == key)
+            when (key) {
+                Cache.GENERAL_INFO -> {
+                    api.getGeneralInfo(false)
+                }
+                Cache.GENERAL_INFO_ENG -> {
+                    api.getGeneralInfo(true)
+                }
+                Cache.WARNING_INFO -> {
+                    api.getWarningInfo(false)
+                }
+                Cache.WARNING_INFO_ENG -> {
+                    api.getWarningInfo(true)
+                }
+                Cache.TROPICAL_CYCLONE -> {
+                    api.getTropicalCyclones()
+                }
+                else -> {
+                    null
+                }
             }
         })
-    private val buttons = mutableListOf<QueryButton>()
+    private val queryButtons = ConcurrentHashMap<String, QueryButton>()
     private val mainPage: QueryPage
     private val localisers = HashMap<BotLocale, Localiser>()
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
@@ -343,7 +382,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
         }
 
         // build buttons
-        buttons.add(QueryButton(
+        queryButtons["current_weather"] = QueryButton(
             { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.CURRENT_WEATHER_BTN) },
             "current_weather"
         ).apply {
@@ -354,98 +393,87 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     composers[locale]!!.composeCurrentWeather(requestGeneralInfo(locale))
                 )
             }
-        })
-        buttons.add(
-            QueryButton(
-                { chatId ->
-                    localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.GENERAL_WEATHER_FORECAST_BTN)
-                },
-                "general_weather"
-            ).apply {
-                buildMessage = {
-                    val locale = getChatLocale(getChat(it).id)
-                    Pair(
-                        ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
-                        composers[locale]!!.composeGeneralWeatherInfo(requestGeneralInfo(locale), RenderMode.MARKDOWN)
-                    )
-                }
-            })
-        buttons.add(
-            QueryButton(
-                { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.ABOUT_BTN) },
-                "about"
-            ).apply {
-                buildMessage = {
-                    val version = Global.buildProperties.getProperty("version", "__VERSION__")
-                    val timestamp = Global.buildProperties.getProperty("timestamp", "0")
-                    Pair(ReplyMode.UPDATE_QUERY, "$version+$timestamp")
-                }
-            })
-        buttons.add(
-            QueryButton(
-                { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.SETTINGS_BTN) },
-                "settings"
-            )
-        )
-        buttons.add(
-            QueryButton(
-                { chatId ->
-                    val settings = getChatSettings(chatId)
-                    "${localisers[settings.botLocale]!!.get(LocaliseComponent.NOTIFICATION_BTN)}: ${
-                        localisers[settings.botLocale]!!.get(
-                            if (settings.isNotificationEnabled) {
-                                LocaliseComponent.ENABLED
-                            } else {
-                                LocaliseComponent.DISABLED
-                            }
-                        )
-                    }"
-                },
-                "notification"
-            ).apply {
-                buildMessage = {
-                    val chatId = getChat(it).id
-                    val settings = getChatSettings(chatId)
-                    settings.isNotificationEnabled = !settings.isNotificationEnabled
-                    Pair(ReplyMode.RERENDER_QUERY, "")
-                }
+        }
+        queryButtons["general_weather"] = QueryButton(
+            { chatId ->
+                localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.GENERAL_WEATHER_FORECAST_BTN)
+            },
+            "general_weather"
+        ).apply {
+            buildMessage = {
+                val locale = getChatLocale(getChat(it).id)
+                Pair(
+                    ReplyMode.NEW_MESSAGE_AND_BACK_MARKDOWN,
+                    composers[locale]!!.composeGeneralWeatherInfo(requestGeneralInfo(locale), RenderMode.MARKDOWN)
+                )
             }
+        }
+        queryButtons["about"] = QueryButton(
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.ABOUT_BTN) },
+            "about"
+        ).apply {
+            buildMessage = {
+                val version = Global.buildProperties.getProperty("version", "__VERSION__")
+                val timestamp = Global.buildProperties.getProperty("timestamp", "0")
+                Pair(ReplyMode.UPDATE_QUERY, "$version+$timestamp")
+            }
+        }
+        queryButtons["settings"] = QueryButton(
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.SETTINGS_BTN) },
+            "settings"
         )
-        buttons.add(
-            QueryButton(
-                { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.NINE_DAYS_FORECAST_BTN) },
-                "9_day_forecast"
-            )
+        queryButtons["notification"] = QueryButton(
+            { chatId ->
+                val settings = getChatSettings(chatId)
+                "${localisers[settings.botLocale]!!.get(LocaliseComponent.NOTIFICATION_BTN)}: ${
+                    localisers[settings.botLocale]!!.get(
+                        if (settings.isNotificationEnabled) {
+                            LocaliseComponent.ENABLED
+                        } else {
+                            LocaliseComponent.DISABLED
+                        }
+                    )
+                }"
+            },
+            "notification"
+        ).apply {
+            buildMessage = {
+                val chatId = getChat(it).id
+                val settings = getChatSettings(chatId)
+                settings.isNotificationEnabled = !settings.isNotificationEnabled
+                Pair(ReplyMode.RERENDER_QUERY, "")
+            }
+        }
+        queryButtons["9_day_forecast"] = QueryButton(
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.NINE_DAYS_FORECAST_BTN) },
+            "9_day_forecast"
         )
-        buttons.add(
-            QueryButton(
-                { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.OTHERS_BTN) },
-                "others"
-            )
+        queryButtons["others"] = QueryButton(
+            { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.OTHERS_BTN) },
+            "others"
         )
-        buttons.add(
-            QueryButton(
-                { chatId ->
-                    "${localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.LANGUAGE_BTN)}: ${
-                        localisers[getChatLocale(chatId)]!!.get(
-                            if (getChatLocale(chatId) == BotLocale.ZH_HK) {
-                                LocaliseComponent.LANG_CHI
-                            } else {
-                                LocaliseComponent.LANG_ENG
-                            }
-                        )
-                    }"
-                },
-                "language"
-            ).apply {
-                buildMessage = {
-                    val chatId = getChat(it).id
-                    if (getChatLocale(chatId) == BotLocale.ZH_HK) setChatLocale(chatId, BotLocale.EN_UK)
-                    else setChatLocale(chatId, BotLocale.ZH_HK)
-                    Pair(ReplyMode.RERENDER_QUERY, "")
-                }
-            })
-        buttons.add(QueryButton(
+        queryButtons["language"] = QueryButton(
+            { chatId ->
+                "${localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.LANGUAGE_BTN)}: ${
+                    localisers[getChatLocale(chatId)]!!.get(
+                        if (getChatLocale(chatId) == BotLocale.ZH_HK) {
+                            LocaliseComponent.LANG_CHI
+                        } else {
+                            LocaliseComponent.LANG_ENG
+                        }
+                    )
+                }"
+            },
+            "language"
+        ).apply {
+            buildMessage = {
+                val chatId = getChat(it).id
+                if (getChatLocale(chatId) == BotLocale.ZH_HK) setChatLocale(chatId, BotLocale.EN_UK)
+                else setChatLocale(chatId, BotLocale.ZH_HK)
+                Pair(ReplyMode.RERENDER_QUERY, "")
+            }
+        }
+        queryButtons["active_warnings"] = QueryButton(
             { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.ACTIVE_WARN_BTN) },
             "active_warnings"
         ).apply {
@@ -457,22 +485,87 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     composers[locale]!!.composeWeatherWarning(requestWarningInfo(locale), RenderMode.MARKDOWN)
                 )
             }
-        })
-        buttons.add(QueryButton({ "" }, "landing", telegramBot.me.firstName))
+        }
+        queryButtons["landing"] = QueryButton({ "" }, "landing", telegramBot.me.firstName)
 
         // setup page flow
-        mainPage = QueryPage("landing")
-            .addItems(
-                QueryPage("current_weather"),
-                QueryPage("general_weather"),
-                //QueryPage("9_day_forecast"), // TODO - implement 9 days
-                QueryPage("active_warnings"),
-                QueryPage("others"),
-                QueryPage("settings")
-                    .addItems("notification")
-                    .addItems("language"),
-                QueryPage("about"),
-            )
+        mainPage = QueryPage("landing").apply {
+            renderLayout = { mainPageChatId ->
+                val buttons = mutableListOf(
+                    QueryPage("current_weather"),
+                    QueryPage("general_weather"),
+                    //QueryPage("9_day_forecast"), // TODO - implement 9 days
+                    QueryPage("active_warnings"),
+                )
+
+                val tropicalCyclones = apiCache.get(Cache.TROPICAL_CYCLONE)
+                if (tropicalCyclones is TropicalCyclones && tropicalCyclones.values.isNotEmpty()) {
+                    val tcBuildMessage = { update: Update, tc: TropicalCyclone ->
+                        val chatId = getChat(update).id
+                        val locale = getChatLocale(chatId)
+                        Pair(
+                            ReplyMode.NEW_MESSAGE_AND_BACK,
+                            if (tc.tcId == null) "" else composers[locale]!!.composeTropicalCycloneMessage(tc)
+                        )
+                    }
+                    for (tc in tropicalCyclones.values) {
+                        val callbackData = "${TROPICAL_CYCLONE_BTN_PREFIX}${tc.tcId}"
+                        if (!queryButtons.containsKey(callbackData)) {
+                            queryButtons.putIfAbsent(callbackData, QueryButton(
+                                {
+                                    when (getChatLocale(it)) {
+                                        BotLocale.ZH_HK -> {
+                                            tc.tcName ?: ""
+                                        }
+                                        else -> {
+                                            tc.enName ?: ""
+                                        }
+                                    }
+                                },
+                                "tc_${tc.tcId}"
+                            ).apply {
+                                buildMessage = { tcBuildMessage(it, tc) }
+                            })
+                        }
+                    }
+
+                    // add tropical cyclone buttons
+                    val callbackData = tropicalCyclones.values
+                        .map { "${TROPICAL_CYCLONE_BTN_PREFIX}${it.tcId}" }.toTypedArray()
+                    buttons.add(QueryPage("tc").addItems(*callbackData))
+                    queryButtons["tc"] = QueryButton(
+                        { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.TROPICAL_CYCLONE_BTN) },
+                        "tc"
+                    ).apply {
+                        buildMessage = {
+                            val chatId = getChat(it).id
+                            Pair(
+                                ReplyMode.UPDATE_QUERY,
+                                localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.TROPICAL_CYCLONE_BTN)
+                            )
+                        }
+                    }
+                } else {
+                    // remove all tc buttons
+                    queryButtons.keys().toList()
+                        .filter { it.startsWith(TROPICAL_CYCLONE_BTN_PREFIX) }
+                        .forEach {
+                            queryButtons.remove(it)
+                        }
+                }
+
+                buttons.addAll(
+                    listOf(
+                        QueryPage("others"),
+                        QueryPage("settings")
+                            .addItems("notification")
+                            .addItems("language"),
+                        QueryPage("about")
+                    )
+                )
+                buttons.map { listOf(it) }
+            }
+        }
 
         // schedule check warning
         fixedRateTimer("weather_warning_check_task", true, period = 20000L) {
@@ -493,13 +586,13 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 
     private fun requestGeneralInfo(botLocale: BotLocale): WeatherInfo {
-        return cache.get(
+        return apiCache.get(
             if (botLocale == BotLocale.ZH_HK) Cache.GENERAL_INFO else Cache.GENERAL_INFO_ENG
         ) as WeatherInfo
     }
 
     private fun requestWarningInfo(botLocale: BotLocale): WarningInfo {
-        return cache.get(
+        return apiCache.get(
             if (botLocale == BotLocale.ZH_HK) Cache.WARNING_INFO else Cache.WARNING_INFO_ENG
         ) as WarningInfo
     }
@@ -569,7 +662,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
         return if (Command.START.command.equals(text, ignoreCase = true)) {
             // reset user state
-            val traveller = QueryGraphTraveller(mainPage, buttons)
+            val traveller = QueryGraphTraveller(mainPage, queryButtons)
             val reply = traveller
                 .goHome()
                 .replyNew(update)
@@ -585,7 +678,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 
     fun handleCallbackQuery(update: Update): List<BotApiMethod<*>> {
-        val traveller = QueryGraphTraveller(mainPage, buttons)
+        val traveller = QueryGraphTraveller(mainPage, queryButtons)
         val callbackData = update.callbackQuery.data
         traveller.travelTo(callbackData)
         return traveller.react(update)

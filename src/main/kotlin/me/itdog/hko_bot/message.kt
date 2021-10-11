@@ -10,8 +10,6 @@ import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.User
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
-import java.util.function.Function
-import java.util.stream.Collectors
 
 fun getUser(update: Update): User {
     when {
@@ -49,14 +47,8 @@ class QueryGraphTraveller(private val root: QueryPage) {
         return InlineKeyboardButton(btn.buttonText.invoke(chatId)).apply { callbackData = btn.callbackData }
     }
 
-    constructor(graph: QueryPage, queryButtons: List<QueryButton>) : this(graph) {
-        this.buttons = queryButtons.stream()
-            .collect(
-                Collectors.toMap(
-                    { it.callbackData },
-                    Function.identity()
-                )
-            )
+    constructor(graph: QueryPage, buttons: MutableMap<String, QueryButton>) : this(graph) {
+        this.buttons = buttons
     }
 
     fun goHome(): QueryGraphTraveller {

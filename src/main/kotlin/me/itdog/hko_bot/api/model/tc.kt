@@ -9,7 +9,7 @@ class TropicalCyclones {
 
     @SerializedName("TC")
     @Expose
-    var tropicalCyclones: List<TropicalCyclone>? = null
+    var values: List<TropicalCyclone> = emptyList()
 }
 
 @Generated("jsonschema2pojo")

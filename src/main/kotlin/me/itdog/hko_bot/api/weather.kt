@@ -17,7 +17,7 @@ class HongKongObservatory {
         const val API_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/one_json.xml"
         const val WARNING_URL = "http://www.hko.gov.hk/wxinfo/json/warnsumc.xml"
         const val WARNING_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/warnsum.xml"
-        const val TROPICAL_CYCLONE_URL = "https://www.hko.gov.hk/wxinfo/json/tcFront.json"
+        const val TROPICAL_CYCLONE_URL = "http://www.hko.gov.hk/wxinfo/json/tcFront.json"
     }
 
     private val l = LoggerFactory.getLogger(javaClass)
