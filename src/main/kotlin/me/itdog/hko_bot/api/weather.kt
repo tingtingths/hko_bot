@@ -1,6 +1,7 @@
 package me.itdog.hko_bot.api
 
 import com.google.gson.Gson
+import me.itdog.hko_bot.api.model.TropicalCyclones
 import me.itdog.hko_bot.api.model.WarningInfo
 import me.itdog.hko_bot.api.model.WeatherInfo
 import okhttp3.Interceptor
@@ -16,6 +17,7 @@ class HongKongObservatory {
         const val API_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/one_json.xml"
         const val WARNING_URL = "http://www.hko.gov.hk/wxinfo/json/warnsumc.xml"
         const val WARNING_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/warnsum.xml"
+        const val TROPICAL_CYCLONE_URL = "https://www.hko.gov.hk/wxinfo/json/tcFront.json"
     }
 
     private val l = LoggerFactory.getLogger(javaClass)
@@ -29,13 +31,22 @@ class HongKongObservatory {
         .build()
     private val gson = Gson()
 
+    private fun <T> requestToObject(request: Request, clazz: Class<T>): T {
+        val resp = client.newCall(request).execute()
+        val body = resp.body ?: throw Error("Empty body response...")
+        return gson.fromJson(body.string(), clazz)
+    }
+
+    fun getTropicalCyclones(): TropicalCyclones {
+        val req = Request.Builder().url(TROPICAL_CYCLONE_URL).build()
+        return requestToObject(req, TropicalCyclones::class.java)
+    }
+
     fun getGeneralInfo(isEnglish: Boolean = false): WeatherInfo {
         val req = Request.Builder()
             .url(if (isEnglish) API_URL_ENG else API_URL)
             .build()
-        val resp = client.newCall(req).execute()
-        val body = resp.body ?: throw Error("Empty body response...")
-        return gson.fromJson(body.string(), WeatherInfo::class.java)
+        return requestToObject(req, WeatherInfo::class.java)
     }
 
     fun getWarningInfo(isEnglish: Boolean = false): WarningInfo {

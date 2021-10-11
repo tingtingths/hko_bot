@@ -465,7 +465,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
             .addItems(
                 QueryPage("current_weather"),
                 QueryPage("general_weather"),
-                QueryPage("9_day_forecast"),
+                //QueryPage("9_day_forecast"), // TODO - implement 9 days
                 QueryPage("active_warnings"),
                 QueryPage("others"),
                 QueryPage("settings")
