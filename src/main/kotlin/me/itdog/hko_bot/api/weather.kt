@@ -18,8 +18,7 @@ class HongKongObservatory {
         const val API_URL = "http://www.hko.gov.hk/wxinfo/json/one_json_uc.xml"
         const val API_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/one_json.xml"
 
-        //const val WARNING_URL = "http://www.hko.gov.hk/wxinfo/json/warnsumc.xml"
-        const val WARNING_URL = "http://localhost:58080/warnsumc.json"
+        const val WARNING_URL = "http://www.hko.gov.hk/wxinfo/json/warnsumc.xml"
         const val WARNING_URL_ENG = "http://www.hko.gov.hk/wxinfo/json/warnsum.xml"
         const val TROPICAL_CYCLONE_URL = "http://www.hko.gov.hk/wxinfo/json/tcFront.json"
         const val TROPICAL_CYCLONE_DETAILS_URL = "http://www.hko.gov.hk/wxinfo/currwx/tc_posc_%s.json"
