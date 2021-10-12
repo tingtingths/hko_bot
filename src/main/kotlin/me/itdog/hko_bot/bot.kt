@@ -21,6 +21,7 @@ import org.telegram.telegrambots.meta.api.objects.inlinequery.result.InlineQuery
 import org.telegram.telegrambots.meta.bots.AbsSender
 import org.telegram.telegrambots.meta.generics.TelegramBot
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -88,27 +89,6 @@ class WeatherBotBuilder {
     }
 }
 
-fun escapeMarkdown(message: String): String {
-    return message.replace("_", "\\_")
-        .replace("*", "\\*")
-        .replace("[", "\\[")
-        .replace("]", "\\]")
-        .replace("(", "\\(")
-        .replace(")", "\\)")
-        .replace("~", "\\~")
-        .replace("`", "\\`")
-        .replace(">", "\\>")
-        .replace("#", "\\#")
-        .replace("+", "\\+")
-        .replace("-", "\\-")
-        .replace("=", "\\=")
-        .replace("|", "\\|")
-        .replace("{", "\\{")
-        .replace("}", "\\}")
-        .replace(".", "\\.")
-        .replace("!", "\\!")
-}
-
 fun formatBulletinDateTime(date: String?, time: String?): String {
     var ret = ""
 
@@ -125,6 +105,43 @@ fun formatBulletinDateTime(date: String?, time: String?): String {
     }
 
     return ret
+}
+
+private fun String?.pad(prefix: String = "", suffix: String = ""): String {
+    if (this != null && this.isNotEmpty()) {
+        return "$prefix$this$suffix"
+    }
+    return this ?: ""
+}
+
+private fun String?.escapeMarkdownNullable(): String? {
+    if (this != null) return this.escapeMarkdown()
+    return this
+}
+
+private fun String.escapeMarkdown(): String {
+    fun escapeMarkdown(message: String): String {
+        return message.replace("_", "\\_")
+            .replace("*", "\\*")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+            .replace("~", "\\~")
+            .replace("`", "\\`")
+            .replace(">", "\\>")
+            .replace("#", "\\#")
+            .replace("+", "\\+")
+            .replace("-", "\\-")
+            .replace("=", "\\=")
+            .replace("|", "\\|")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+            .replace(".", "\\.")
+            .replace("!", "\\!")
+    }
+
+    return escapeMarkdown(this)
 }
 
 open class WeatherBot(val telegramBot: AbsSender) {
@@ -165,18 +182,6 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 
     inner class WeatherMessageComposer(private val localiser: Localiser) {
-
-        private fun String?.pad(prefix: String = "", suffix: String = ""): String {
-            if (this != null && this.isNotEmpty()) {
-                return "$prefix$this$suffix"
-            }
-            return this ?: ""
-        }
-
-        private fun String?.escapeMarkdown(): String? {
-            if (this != null) return escapeMarkdown(this)
-            return this
-        }
 
         private fun formatFlwTime(flw: Flw): String {
             return formatBulletinDateTime(flw.bulletinDate, flw.bulletinTime)
@@ -224,12 +229,12 @@ open class WeatherBot(val telegramBot: AbsSender) {
                             formatFlwTime(info.flw!!).escapeMarkdown().pad("_", "_\n\n")
                         else
                             ""
-                        ret += flw?.generalSituation.escapeMarkdown().pad(suffix = "\n\n") +
-                                flw?.tCInfo.escapeMarkdown().pad(suffix = "\n\n") +
-                                flw?.forecastPeriod.escapeMarkdown().pad("__*", "*__\n") +
-                                flw?.forecastDesc.escapeMarkdown().pad(suffix = "\n\n") +
-                                flw?.outlookTitle.escapeMarkdown().pad("__*", "*__\n") +
-                                flw?.outlookContent.escapeMarkdown()
+                        ret += flw?.generalSituation.escapeMarkdownNullable().pad(suffix = "\n\n") +
+                                flw?.tCInfo.escapeMarkdownNullable().pad(suffix = "\n\n") +
+                                flw?.forecastPeriod.escapeMarkdownNullable().pad("__*", "*__\n") +
+                                flw?.forecastDesc.escapeMarkdownNullable().pad(suffix = "\n\n") +
+                                flw?.outlookTitle.escapeMarkdownNullable().pad("__*", "*__\n") +
+                                flw?.outlookContent.escapeMarkdownNullable()
                     }
                 }
                 ret
@@ -274,22 +279,26 @@ open class WeatherBot(val telegramBot: AbsSender) {
             }
         }
 
+        fun composeWarningBase(warningBase: WarningBase, renderMode: RenderMode = RenderMode.TEXT): String {
+            val type = if (!warningBase.type.isNullOrEmpty()) " - ${warningBase.type}" else ""
+            val time = formatBulletinDateTime(warningBase.issueDate, warningBase.issueTime)
+            val warningLine = "${warningBase.name}${type} ($time)"
+            return when (renderMode) {
+                RenderMode.TEXT -> warningLine
+                RenderMode.MARKDOWN -> warningLine.escapeMarkdown()
+            }
+        }
+
         fun composeWeatherWarning(warning: WarningInfo, renderMode: RenderMode = RenderMode.TEXT): String {
             return warning.let {
                 val content = warning.activeWarnings().stream()
-                    .map {
-                        val type = if (!it.type.isNullOrEmpty()) " - ${it.type}" else ""
-                        val time = formatBulletinDateTime(it.bulletinDate, it.bulletinTime)
-                        val warningLine = "${it.name}${type} ($time)"
-                        when (renderMode) {
-                            RenderMode.TEXT -> warningLine
-                            RenderMode.MARKDOWN -> escapeMarkdown(warningLine)
-                        }
-                    }
+                    .map { composeWarningBase(it, renderMode) }
                     .collect(Collectors.joining("\n"))
                 when (renderMode) {
                     RenderMode.TEXT -> "${localiser.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS)} (${warning.activeWarnings().size})\n$content"
-                    RenderMode.MARKDOWN -> "__*${escapeMarkdown(localiser.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS))}*__ \\(${warning.activeWarnings().size}\\)\n$content"
+                    RenderMode.MARKDOWN -> "__*${
+                        localiser.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS).escapeMarkdown()
+                    }*__ \\(${warning.activeWarnings().size}\\)\n$content"
                 }
             }
         }
@@ -422,7 +431,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
             }
         })
     private val queryButtons = ConcurrentHashMap<String, QueryButton>()
-    private val mainPage: QueryPage
+    private lateinit var mainPage: QueryPage
     private val localisers = HashMap<BotLocale, Localiser>()
     private val composers = HashMap<BotLocale, WeatherMessageComposer>()
 
@@ -433,7 +442,54 @@ open class WeatherBot(val telegramBot: AbsSender) {
             localisers[locale] = localiser
             composers[locale] = WeatherMessageComposer(localiser)
         }
+        prepareButtons()
+        // schedule check warning
+        fixedRateTimer("weather_warning_check_task", true, period = 60000L) {
+            fun parseDatetime(warning: WarningBase): Instant {
+                return SimpleDateFormat("yyyyMMdd").parse(warning.issueDate + warning.issueTime).toInstant()
+            }
 
+            fun processWarnings(isEnglish: Boolean = false) {
+                val locale = if (isEnglish) BotLocale.EN_UK else BotLocale.ZH_HK
+
+                val lastNotifiedWarnings = Global.appSettingsPersistent.getApplicationSettings().lastNotifiedWarnings
+                val warning = api.getWarningInfo(isEnglish) // skip cache
+                val lines = mutableListOf<String>()
+
+                warning.activeWarnings().forEach {
+                    if (it.issueDate == null || it.issueTime == null) return
+                    val key = it.name + (if (it.name != null && it.type != null) " - " else "") + it.type
+                    val lastIssued = lastNotifiedWarnings[key]
+                    val issued = parseDatetime(it)
+                    if (lastIssued == null || lastIssued != issued) {
+                        lines.add(composers[locale]!!.composeWarningBase(it, RenderMode.MARKDOWN))
+                        lastNotifiedWarnings[key] = issued
+                    }
+                }
+                logger.debug("New warnings: $lines")
+                if (lines.isNotEmpty()) {
+                    val text = "❗❗*${
+                        localisers[locale]!!.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS).escapeMarkdown()
+                    }*❗❗\n\n" +
+                            lines.joinToString("\n")
+                    // find all related user (by language)
+                    Global.persistent.getAllChatsSettings()
+                        .filter { it.value.botLocale == locale }
+                        .forEach {
+                            val message = SendMessage()
+                            message.chatId = it.key.toString()
+                            message.text = text
+                            message.parseMode = "MarkdownV2"
+                            telegramBot.execute(message)
+                        }
+                }
+            }
+            processWarnings(false)
+            processWarnings(true)
+        }
+    }
+
+    private fun prepareButtons() {
         // build buttons
         queryButtons["current_weather"] = QueryButton(
             { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.CURRENT_WEATHER_BTN) },
@@ -629,11 +685,6 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 )
                 buttons.map { listOf(it) }
             }
-        }
-
-        // schedule check warning
-        fixedRateTimer("weather_warning_check_task", true, period = 20000L) {
-
         }
     }
 

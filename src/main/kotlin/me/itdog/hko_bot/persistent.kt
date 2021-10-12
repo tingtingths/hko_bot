@@ -1,6 +1,8 @@
 package me.itdog.hko_bot
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -17,6 +19,8 @@ import kotlin.math.abs
 
 data class ChatSettings(var botLocale: BotLocale, var isNotificationEnabled: Boolean)
 
+data class ApplicationSettings(var lastNotifiedWarnings: MutableMap<String, Instant> = mutableMapOf())
+
 interface KeyValuePersistent<K, V> {
     fun get(key: K): V?
     fun set(key: K, value: V)
@@ -32,13 +36,24 @@ interface ChatSettingsPersistent {
     fun close()
 }
 
-class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<String, String>, ChatSettingsPersistent {
+interface ApplicationSettingsPersistent {
+    fun getApplicationSettings(): ApplicationSettings
+    fun saveApplicationSettings(applicationSettings: ApplicationSettings)
+    fun close()
+}
+
+inline fun <reified T> Gson.fromJson(json: JsonElement) = fromJson<T>(json, object : TypeToken<T>() {}.type)
+inline fun <reified T> Gson.fromJson(json: String) = fromJson<T>(json, object : TypeToken<T>() {}.type)
+
+class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<String, String>, ChatSettingsPersistent,
+    ApplicationSettingsPersistent {
 
     private val gson = Gson()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
     private enum class CacheKeyPrefix(val prefix: String) {
-        CHAT_SETTINGS("hko_bot_chat_settings_")
+        CHAT("hko_bot_chat_settings_"),
+        APPLICATION("hko_bot_app_settings_")
     }
 
     private fun borrowConnection(): Jedis {
@@ -75,15 +90,31 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         }.let { returnConnection(it) }
     }
 
+    override fun getApplicationSettings(): ApplicationSettings {
+        val key = CacheKeyPrefix.APPLICATION.prefix + "master"
+        val json = get(key)
+        return if (json == null) ApplicationSettings() else try {
+            gson.fromJson(json)
+        } catch (e: Exception) {
+            del(key)
+            ApplicationSettings()
+        }
+    }
+
+    override fun saveApplicationSettings(applicationSettings: ApplicationSettings) {
+        val json = gson.toJson(applicationSettings)
+        set(CacheKeyPrefix.APPLICATION.prefix + "master", json)
+    }
+
     override fun close() {
         jedisPool.close()
     }
 
     override fun getChatSettings(id: Long, otherwise: ChatSettings?): ChatSettings? {
-        val key = CacheKeyPrefix.CHAT_SETTINGS.prefix + id
+        val key = CacheKeyPrefix.CHAT.prefix + id
         val json = get(key)
         return if (json == null) otherwise else try {
-            gson.fromJson(json, ChatSettings::class.java)
+            gson.fromJson(json)
         } catch (e: Exception) {
             del(key)
             otherwise
@@ -94,14 +125,14 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         var ret: Map<Long, ChatSettings>
         with(borrowConnection()) {
             // convert to list to maintain order
-            val keys = ArrayList(keys(CacheKeyPrefix.CHAT_SETTINGS.prefix + "*"))
+            val keys = ArrayList(keys(CacheKeyPrefix.CHAT.prefix + "*"))
             keys.sort()
             val allKeys = keys.toTypedArray()
             ret = if (allKeys.isNotEmpty()) {
                 val settings = mget(*allKeys)
                 allKeys.zip(settings) { id, setting ->
                     Pair(
-                        id.replaceFirst(CacheKeyPrefix.CHAT_SETTINGS.prefix, "").toLong(),
+                        id.replaceFirst(CacheKeyPrefix.CHAT.prefix, "").toLong(),
                         if (setting != null) gson.fromJson(setting, ChatSettings::class.java) else null
                     )
                 }.filter {
@@ -117,7 +148,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
 
     override fun saveChatSettings(id: Long, settings: ChatSettings) {
         val json = gson.toJson(settings)
-        set(CacheKeyPrefix.CHAT_SETTINGS.prefix + id, json)
+        set(CacheKeyPrefix.CHAT.prefix + id, json)
     }
 
     override fun saveChatSettings(chatSettings: Map<Long, ChatSettings>) {
@@ -133,13 +164,22 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     }
 }
 
-class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, ChatSettings>, ChatSettingsPersistent {
+class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, JsonElement>, ChatSettingsPersistent,
+    ApplicationSettingsPersistent {
 
     private val gson = Gson()
-    private var chatSettings: MutableMap<Long, ChatSettings> = mutableMapOf()
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private var outstandingChanges: AtomicInteger = AtomicInteger(0)
     private var lastWrite = Instant.now()
+
+    // cached images
+    private var image: JsonObject
+    private var chatSettingsImage: MutableMap<Long, ChatSettings>
+    private var applicationSettingsImage: ApplicationSettings
+
+    private enum class Namespace(val key: String) {
+        CHAT("chat_settings"), APPLICATION("application")
+    }
 
     init {
         if (!file.exists()) {
@@ -151,40 +191,61 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Cha
         }
         // read from file
         gson.newJsonReader(FileReader(file)).let { reader ->
-            chatSettings = try {
-                if (file.length() > 0)
-                    gson.fromJson(reader, object : TypeToken<Map<Long, ChatSettings>>() {}.type)
-                else
-                    mutableMapOf()
+            image = try {
+                if (file.length() > 0) {
+                    gson.fromJson(reader, JsonObject::class.java) ?: JsonObject()
+                } else {
+                    JsonObject()
+                }
             } catch (e: Exception) {
                 logger.warn("Unable to parse persistent file ${file.path}, back up current file...")
                 file.copyTo(
                     File(file.parent, "${file.name}.${System.currentTimeMillis()}")
                 )
-                mutableMapOf()
+                JsonObject()
             }
             reader.close()
         }
+
+        chatSettingsImage = if (image.has(Namespace.CHAT.key)) {
+            gson.fromJson(image.get(Namespace.CHAT.key))
+        } else {
+            mutableMapOf()
+        }
+        applicationSettingsImage = if (image.has(Namespace.APPLICATION.key)) {
+            gson.fromJson(image.get(Namespace.APPLICATION.key))
+        } else {
+            ApplicationSettings()
+        }
     }
 
-    override fun get(key: Long): ChatSettings? {
-        val value = chatSettings[key]
+    override fun get(key: String): JsonElement? {
+        val value = image.get(key) ?: null
         logger.debug("GET $key=$value")
         return value
     }
 
-    override fun set(key: Long, value: ChatSettings) {
+    override fun set(key: String, value: JsonElement) {
         logger.debug("SET $key=$value")
-        chatSettings[key] = value
+        image.add(key, value)
         outstandingChanges.incrementAndGet()
         write()
     }
 
-    override fun del(key: Long) {
+    override fun del(key: String) {
         logger.debug("DEL $key")
-        chatSettings.remove(key)
+        image.remove(key)
         outstandingChanges.incrementAndGet()
         write()
+    }
+
+    override fun getApplicationSettings(): ApplicationSettings {
+        return applicationSettingsImage
+    }
+
+    override fun saveApplicationSettings(applicationSettings: ApplicationSettings) {
+        applicationSettingsImage = applicationSettings
+        outstandingChanges.incrementAndGet()
     }
 
     override fun close() {
@@ -194,10 +255,14 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Cha
     @Synchronized
     private fun write(force: Boolean = false) {
         if (force) {
+            // consolidate images
+            image.add(Namespace.CHAT.key, gson.toJsonTree(chatSettingsImage))
+            image.add(Namespace.APPLICATION.key, gson.toJsonTree(applicationSettingsImage))
+
             outstandingChanges.set(0)
             lastWrite = Instant.now()
             gson.newJsonWriter(FileWriter(file)).let { writer ->
-                gson.toJson(gson.toJsonTree(chatSettings), writer)
+                gson.toJson(image, writer)
                 writer.flush()
                 writer.close()
             }
@@ -209,19 +274,20 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<Long, Cha
     }
 
     override fun getChatSettings(id: Long, otherwise: ChatSettings?): ChatSettings? {
-        return get(id) ?: otherwise
+        return chatSettingsImage[id] ?: otherwise
     }
 
     override fun getAllChatsSettings(): Map<Long, ChatSettings> {
-        return chatSettings
+        return chatSettingsImage
     }
 
     override fun saveChatSettings(id: Long, settings: ChatSettings) {
-        set(id, settings)
+        chatSettingsImage[id] = settings
+        outstandingChanges.incrementAndGet()
     }
 
     override fun saveChatSettings(chatSettings: Map<Long, ChatSettings>) {
-        this.chatSettings.putAll(chatSettings)
+        chatSettingsImage.putAll(chatSettings)
         write()
     }
 }

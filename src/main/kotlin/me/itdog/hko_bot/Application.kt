@@ -34,7 +34,6 @@ fun main(args: Array<String>) {
             // persist all user settings before shutdown
             println("Saving ${Global.chatSettings.size()} cached user settings..")
             Global.chatSettings.cleanUp()
-            Global.persistent.saveChatSettings(Global.chatSettings.asMap())
             Global.persistent.close()
         }
     })
@@ -44,6 +43,7 @@ class Global {
     companion object {
         lateinit var app: Application
         lateinit var persistent: ChatSettingsPersistent
+        lateinit var appSettingsPersistent: ApplicationSettingsPersistent
 
         // secondary cache for user settings
         val chatSettings: LoadingCache<Long, ChatSettings> = CacheBuilder.newBuilder()
@@ -191,9 +191,16 @@ class Application(args: Array<String>) {
         httpThread = cmdLn.getOptionValue("http-thread", "4").toInt()
         broadcastMessage = cmdLn.getOptionValue("broadcast")
         when {
-            cmdLn.hasOption("redis") -> Global.persistent =
-                RedisPersistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
-            cmdLn.hasOption("file") -> Global.persistent = LocalFilePersistent(File(cmdLn.getOptionValue("file")))
+            cmdLn.hasOption("redis") -> {
+                val persistentSource = RedisPersistent(JedisPool(URI.create(cmdLn.getOptionValue("redis"))))
+                Global.persistent = persistentSource
+                Global.appSettingsPersistent = persistentSource
+            }
+            cmdLn.hasOption("file") -> {
+                val persistentSource = LocalFilePersistent(File(cmdLn.getOptionValue("file")))
+                Global.persistent = persistentSource
+                Global.appSettingsPersistent = persistentSource
+            }
         }
     }
 
@@ -213,7 +220,8 @@ class Application(args: Array<String>) {
             }
             if (cmdLine.hasOption("broadcast")) {
                 if (cmdLine.getOptionValue("broadcast") == null
-                    || cmdLine.getOptionValue("broadcast").trim().isEmpty()) {
+                    || cmdLine.getOptionValue("broadcast").trim().isEmpty()
+                ) {
                     throw IllegalArgumentException("broadcast message is empty")
                 }
             }
