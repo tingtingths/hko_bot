@@ -452,7 +452,8 @@ open class WeatherBot(val telegramBot: AbsSender) {
             fun processWarnings(isEnglish: Boolean = false) {
                 val locale = if (isEnglish) BotLocale.EN_UK else BotLocale.ZH_HK
 
-                val lastNotifiedWarnings = Global.appSettingsPersistent.getApplicationSettings().lastNotifiedWarnings
+                val appSettings = Global.appSettingsPersistent.getApplicationSettings()
+                val lastNotifiedWarnings = appSettings.lastNotifiedWarnings
                 val warning = api.getWarningInfo(isEnglish) // skip cache
                 val lines = mutableListOf<String>()
 
@@ -466,6 +467,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                         lastNotifiedWarnings[key] = issued
                     }
                 }
+                Global.appSettingsPersistent.saveApplicationSettings(appSettings)
                 logger.debug("New warnings: $lines")
                 if (lines.isNotEmpty()) {
                     val text = "❗❗*${
