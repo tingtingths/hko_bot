@@ -209,7 +209,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 when (renderMode) {
                     RenderMode.TEXT -> {
                         ret += if (info.flw != null)
-                            formatFlwTime(info.flw!!).pad("\n\n")
+                            formatFlwTime(info.flw!!).pad(suffix = "\n\n")
                         else
                             ""
                         ret += flw?.generalSituation.pad(suffix = "\n\n") +
