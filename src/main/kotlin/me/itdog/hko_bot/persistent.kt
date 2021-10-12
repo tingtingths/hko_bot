@@ -92,11 +92,15 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
 
     override fun getApplicationSettings(): ApplicationSettings {
         val key = CacheKeyPrefix.APPLICATION.prefix + "master"
-        val json = get(key)
-        return if (json == null) ApplicationSettings() else try {
+        var json = get(key)
+        if (json == null) {
+            set(key, gson.toJson(ApplicationSettings()))
+            return ApplicationSettings()
+        }
+        return try {
             gson.fromJson(json)
         } catch (e: Exception) {
-            del(key)
+            set(key, gson.toJson(ApplicationSettings()))
             ApplicationSettings()
         }
     }
