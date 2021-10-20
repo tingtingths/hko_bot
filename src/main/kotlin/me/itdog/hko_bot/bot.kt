@@ -477,12 +477,13 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     // find all related user (by language)
                     Global.persistent.getAllChatsSettings()
                         .filter { it.value.botLocale == locale }
+                        .filter { it.value.isNotificationEnabled }
                         .forEach {
                             val message = SendMessage()
                             message.chatId = it.key.toString()
                             message.text = text
                             message.parseMode = "MarkdownV2"
-                            telegramBot.execute(message)
+                            telegramBot.executeAsync(message)
                         }
                 }
             }
