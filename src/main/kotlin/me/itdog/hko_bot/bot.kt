@@ -826,11 +826,11 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
 
         when {
             update.hasInlineQuery() -> {
-                logger.debug("($userId), inline query: ${update.inlineQuery.query}")
+                logger.info("($userId), inline query: ${update.inlineQuery.query}")
                 sender.executeAsync(bot.handleInlineQuery(update)).thenRunAsync(completeAction)
             }
             update.hasMessage() -> {
-                logger.debug("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
+                logger.info("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
                 sender.executeAsync(bot.handleMessage(update)).thenRunAsync(completeAction)
             }
             update.hasCallbackQuery() -> {
@@ -850,7 +850,7 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
                     }
                 }
 
-                logger.debug("($userId), callback query: ${update.callbackQuery.data}")
+                logger.info("($userId), callback query: ${update.callbackQuery.data}")
                 val replies = bot.handleCallbackQuery(update)
                 if (replies.isNotEmpty()) {
                     var future: CompletableFuture<*>? = null
