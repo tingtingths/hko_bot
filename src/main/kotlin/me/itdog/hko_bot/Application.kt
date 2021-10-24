@@ -49,7 +49,7 @@ class Global {
         val chatSettings: LoadingCache<Long, ChatSettings> = CacheBuilder.newBuilder()
             .expireAfterAccess(30, TimeUnit.SECONDS)
             .build(CacheLoader.from { key ->
-                persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, false))
+                persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, true))
             })
 
         val buildProperties = Properties()
