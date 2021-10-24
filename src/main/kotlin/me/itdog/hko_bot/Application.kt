@@ -3,6 +3,7 @@ package me.itdog.hko_bot
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
+import me.itdog.hko_bot.bot.*
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -49,7 +50,7 @@ class Global {
         val chatSettings: LoadingCache<Long, ChatSettings> = CacheBuilder.newBuilder()
             .expireAfterAccess(30, TimeUnit.SECONDS)
             .build(CacheLoader.from { key ->
-                persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, true))
+                persistent.getChatSettings(key!!, ChatSettings(BotLocale.EN_UK, false))
             })
 
         val buildProperties = Properties()
