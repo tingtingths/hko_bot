@@ -97,17 +97,17 @@ class Application(args: Array<String>) {
         options.addOption(
             Option.builder()
                 .longOpt("http-thread")
-                .argName("Http thread count, >= 1 and <= 16. (default 4)")
+                .argName("count")
                 .type(Int::class.java)
                 .numberOfArgs(1)
-                .desc("Thread count for bot reply http calls")
+                .desc("Thread count for bot reply http calls. >= 1 and <= 16. (default 4)")
                 .hasArg()
                 .build()
         )
         options.addOption(
             Option.builder()
                 .longOpt("webhook-base-url")
-                .argName("Webhook base url")
+                .argName("url")
                 .type(String::class.java)
                 .numberOfArgs(1)
                 .desc("Webhook base url, provide to start the bot in webhook mode. The final url would be <webhook-url>/callback/<webhook-path>.")
@@ -117,7 +117,7 @@ class Application(args: Array<String>) {
         options.addOption(
             Option.builder()
                 .longOpt("webhook-path")
-                .argName("Webhook url path")
+                .argName("path")
                 .type(String::class.java)
                 .numberOfArgs(1)
                 .desc("Webhook path, should be something random and complex to serve as a security measure. (default generated uuid)")
@@ -127,7 +127,7 @@ class Application(args: Array<String>) {
         options.addOption(
             Option.builder("p")
                 .longOpt("port")
-                .argName("Webhook port")
+                .argName("port")
                 .type(Int::class.java)
                 .numberOfArgs(1)
                 .desc("Webhook port, port for the webhook http server to listen to. (default 80)")
@@ -137,7 +137,7 @@ class Application(args: Array<String>) {
         options.addOption(
             Option.builder()
                 .longOpt("broadcast")
-                .argName("Broadcast message")
+                .argName("message")
                 .type(String::class.java)
                 .numberOfArgs(1)
                 .desc("Broadcast message to all users and exit")
@@ -149,7 +149,7 @@ class Application(args: Array<String>) {
             OptionGroup().addOption(
                 Option.builder("r")
                     .longOpt("redis")
-                    .argName("redis")
+                    .argName("url")
                     .type(String::class.java)
                     .numberOfArgs(1)
                     .desc("Redis connection")
@@ -233,6 +233,7 @@ class Application(args: Array<String>) {
 
     private fun printHelp(options: Options) {
         val helpFmt = HelpFormatter()
+        helpFmt.width = 80
         val version = Global.buildProperties.getProperty("version", "__VERSION__")
         val timestamp = Global.buildProperties.getProperty("timestamp", "0")
         helpFmt.printHelp("hko_bot $version+$timestamp", options)
