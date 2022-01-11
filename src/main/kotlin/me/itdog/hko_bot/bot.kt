@@ -746,6 +746,14 @@ open class WeatherBot(val telegramBot: AbsSender) {
             },
             InlineQueryResultArticle().apply {
                 id = UUID.randomUUID().toString()
+                title = localisers[BotLocale.ZH_HK]!!.get(LocaliseComponent.NINE_DAYS_FORECAST_BTN)
+                inputMessageContent = InputTextMessageContent().apply {
+                    val locale = BotLocale.ZH_HK
+                    messageText = composers[locale]!!.composeNineDaysForecast(requestGeneralInfo(locale))
+                }
+            },
+            InlineQueryResultArticle().apply {
+                id = UUID.randomUUID().toString()
                 title = localisers[BotLocale.EN_UK]!!.get(LocaliseComponent.CURRENT_WEATHER_BTN)
                 inputMessageContent = InputTextMessageContent().apply {
                     val locale = BotLocale.EN_UK
@@ -767,7 +775,15 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     val locale = BotLocale.EN_UK
                     messageText = composers[locale]!!.composeWeatherWarning(requestWarningInfo(locale))
                 }
-            }
+            },
+            InlineQueryResultArticle().apply {
+                id = UUID.randomUUID().toString()
+                title = localisers[BotLocale.EN_UK]!!.get(LocaliseComponent.NINE_DAYS_FORECAST_BTN)
+                inputMessageContent = InputTextMessageContent().apply {
+                    val locale = BotLocale.EN_UK
+                    messageText = composers[locale]!!.composeNineDaysForecast(requestGeneralInfo(locale))
+                }
+            },
         )
         return reply
     }
