@@ -1,19 +1,8 @@
 # resolve and cache dependencies, for subsequence build
-FROM gradle:7-jdk11 as cache
-
-COPY *.gradle.kts /app/
-COPY *.properties /app/
-
-WORKDIR /app/
-RUN gradle clean build
-
 FROM gradle:7-jdk11 as build
 
-COPY --from=cache /home/gradle/.gradle /home/gradle/.gradle
-RUN true
 COPY . /app/
 WORKDIR /app/
-
 # build jar
 RUN gradle jar
 
