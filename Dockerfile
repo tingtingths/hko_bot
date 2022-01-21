@@ -10,6 +10,7 @@ RUN gradle clean build
 FROM gradle:7-jdk11 as build
 
 COPY --from=cache /home/gradle/.gradle /home/gradle/.gradle
+RUN true
 COPY . /app/
 WORKDIR /app/
 
