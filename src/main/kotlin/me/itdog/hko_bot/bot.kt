@@ -466,8 +466,8 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     }
                 }
                 Global.appSettingsPersistent.saveApplicationSettings(appSettings)
-                log.info("New warnings: $lines")
                 if (lines.isNotEmpty()) {
+                    log.info("New warnings: $lines")
                     val text = "❗❗*${
                         localisers[locale]!!.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS).escapeMarkdown()
                     }*❗❗\n\n" +
