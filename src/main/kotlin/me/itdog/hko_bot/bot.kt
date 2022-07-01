@@ -36,8 +36,6 @@ enum class BotLocale {
 
 class WeatherBotBuilder {
 
-    val logger = LoggerFactory.getLogger(this::class.java)
-
     enum class UpdateType {
         LONG_POLL, WEBHOOK
     }
@@ -115,8 +113,7 @@ private fun String?.pad(prefix: String = "", suffix: String = ""): String {
 }
 
 private fun String?.escapeMarkdownNullable(): String? {
-    if (this != null) return this.escapeMarkdown()
-    return this
+    return this?.escapeMarkdown()
 }
 
 private fun String.escapeMarkdown(): String {
@@ -145,8 +142,6 @@ private fun String.escapeMarkdown(): String {
 }
 
 open class WeatherBot(val telegramBot: AbsSender) {
-
-    private val TROPICAL_CYCLONE_BTN_PREFIX = "tc_"
 
     enum class RenderMode {
         TEXT, MARKDOWN
@@ -179,6 +174,13 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
     companion object {
         val localisations = HashMap<BotLocale, Map<LocaliseComponent, String>>()
+    }
+
+    object Const {
+        const val TROPICAL_CYCLONE_BTN_PREFIX = "tc_"
+        const val TROPICAL_CYCLONE_F4 = "F4"
+        const val TROPICAL_CYCLONE_F3 = "F3"
+        const val TROPICAL_CYCLONE_F3_F4 = "F3_F4"
     }
 
     inner class WeatherMessageComposer(private val localiser: Localiser) {
@@ -304,15 +306,11 @@ open class WeatherBot(val telegramBot: AbsSender) {
         }
 
         fun composeTropicalCycloneMessage(tc: TropicalCyclone): String {
-            val TC_DATATYPE_F4 = "F4";
-            val TC_DATATYPE_F3 = "F3";
-            val TC_DATATYPE_F3_F4 = "F3_F4";
-
             return when (tc.datatype) {
-                TC_DATATYPE_F3_F4, TC_DATATYPE_F4 -> {
+                Const.TROPICAL_CYCLONE_F3_F4, Const.TROPICAL_CYCLONE_F4 -> {
                     "http://www.hko.gov.hk/wxinfo/currwx/fp_${tc.tcId}.png"
                 }
-                TC_DATATYPE_F3 -> {
+                Const.TROPICAL_CYCLONE_F3 -> {
                     "http://www.hko.gov.hk/probfcst/${tc.filename}"
                 }
                 else -> {
@@ -405,7 +403,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 
     private val api = HongKongObservatory()
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val log: Logger = LoggerFactory.getLogger(javaClass)
     private val apiCache: LoadingCache<Cache, Any> = CacheBuilder.newBuilder()
         .expireAfterWrite(1, TimeUnit.MINUTES)
         .build(CacheLoader.from { key ->
@@ -468,7 +466,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     }
                 }
                 Global.appSettingsPersistent.saveApplicationSettings(appSettings)
-                logger.debug("New warnings: $lines")
+                log.info("New warnings: $lines")
                 if (lines.isNotEmpty()) {
                     val text = "❗❗*${
                         localisers[locale]!!.get(LocaliseComponent.CURRENT_ACTIVE_WARNINGS).escapeMarkdown()
@@ -478,6 +476,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     Global.persistent.getAllChatsSettings()
                         .filter { it.value.botLocale == locale }
                         .filter { it.value.isNotificationEnabled }
+                        .also { log.info("Send notification to users [${it.keys}]") }
                         .forEach {
                             val message = SendMessage()
                             message.chatId = it.key.toString()
@@ -613,7 +612,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
         // setup page flow
         mainPage = QueryPage("landing").apply {
-            renderLayout = { mainPageChatId ->
+            renderLayout = {
                 val buttons = mutableListOf(
                     QueryPage("current_weather"),
                     QueryPage("general_weather"),
@@ -632,7 +631,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                         )
                     }
                     for (tc in tropicalCyclones.values) {
-                        val callbackData = "${TROPICAL_CYCLONE_BTN_PREFIX}${tc.tcId}"
+                        val callbackData = "${Const.TROPICAL_CYCLONE_BTN_PREFIX}${tc.tcId}"
                         if (!queryButtons.containsKey(callbackData)) {
                             queryButtons.putIfAbsent(callbackData, QueryButton(
                                 {
@@ -654,7 +653,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
                     // add tropical cyclone buttons
                     val callbackData = tropicalCyclones.values
-                        .map { "${TROPICAL_CYCLONE_BTN_PREFIX}${it.tcId}" }.toTypedArray()
+                        .map { "${Const.TROPICAL_CYCLONE_BTN_PREFIX}${it.tcId}" }.toTypedArray()
                     buttons.add(QueryPage("tc").addItems(*callbackData))
                     queryButtons["tc"] = QueryButton(
                         { chatId -> localisers[getChatLocale(chatId)]!!.get(LocaliseComponent.TROPICAL_CYCLONE_BTN) },
@@ -671,7 +670,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                 } else {
                     // remove all tc buttons
                     queryButtons.keys().toList()
-                        .filter { it.startsWith(TROPICAL_CYCLONE_BTN_PREFIX) }
+                        .filter { it.startsWith(Const.TROPICAL_CYCLONE_BTN_PREFIX) }
                         .forEach {
                             queryButtons.remove(it)
                         }
@@ -792,7 +791,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
         val message = update.message
         val chatId = message.chatId.toString()
         val text = message.text
-        logger.debug("[@${message.chat.userName}] Message: $text")
+        log.info("[@${message.chat.userName}] Message: $text")
 
         return if (Command.START.command.equals(text, ignoreCase = true)) {
             // reset user state
@@ -821,7 +820,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
 class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) {
 
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val log: Logger = LoggerFactory.getLogger(javaClass)
 
     fun handle(update: Update?) {
         if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return
@@ -843,11 +842,11 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
 
         when {
             update.hasInlineQuery() -> {
-                logger.info("($userId), inline query: ${update.inlineQuery.query}")
+                log.info("($userId), inline query: ${update.inlineQuery.query}")
                 sender.executeAsync(bot.handleInlineQuery(update)).thenRunAsync(completeAction)
             }
             update.hasMessage() -> {
-                logger.info("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
+                log.info("($userId), message: ${if (update.message.hasText()) update.message.text else "NON_TEXT_MESSAGE"}")
                 sender.executeAsync(bot.handleMessage(update)).thenRunAsync(completeAction)
             }
             update.hasCallbackQuery() -> {
@@ -867,7 +866,7 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
                     }
                 }
 
-                logger.info("($userId), callback query: ${update.callbackQuery.data}")
+                log.info("($userId), callback query: ${update.callbackQuery.data}")
                 val replies = bot.handleCallbackQuery(update)
                 if (replies.isNotEmpty()) {
                     var future: CompletableFuture<*>? = null
@@ -886,7 +885,6 @@ class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) 
 class PollingWeatherBot(private val token: String, private val username: String, defaultBotOptions: DefaultBotOptions) :
     TelegramLongPollingBot(defaultBotOptions) {
 
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private val bot = WeatherBot(this)
     private val updateHandler = UpdateHandler(this, bot)
 
@@ -911,7 +909,6 @@ class WebhookWeatherBot(
 ) :
     TelegramWebhookBot(defaultBotOptions) {
 
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
     private val bot = WeatherBot(this)
     private val updateHandler = UpdateHandler(this, bot)
 
