@@ -476,7 +476,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
                     Global.persistent.getAllChatsSettings()
                         .filter { it.value.botLocale == locale }
                         .filter { it.value.isNotificationEnabled }
-                        .also { log.info("Send notification to users [${it.keys}]") }
+                        .also { log.info("Send notification to users ${it.keys}") }
                         .forEach {
                             val message = SendMessage()
                             message.chatId = it.key.toString()
