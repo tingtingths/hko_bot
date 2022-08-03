@@ -1,6 +1,5 @@
 package me.itdog.hko_bot
 
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
@@ -37,7 +36,7 @@ fun getChat(update: Update): Chat {
 
 class QueryGraphTraveller(private val root: QueryPage) {
 
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val log = LoggerFactory.getLogger(javaClass)
     private lateinit var buttons: MutableMap<String, QueryButton>
     private var currentPage = root
     private val BACK_BTN_CALLBACK_DATA_PREFIX = "__back__:"

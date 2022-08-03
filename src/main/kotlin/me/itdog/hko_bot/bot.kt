@@ -403,7 +403,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
     }
 
     private val api = HongKongObservatory()
-    private val log: Logger = LoggerFactory.getLogger(javaClass)
+    private val log = LoggerFactory.getLogger(javaClass)
     private val apiCache: LoadingCache<Cache, Any> = CacheBuilder.newBuilder()
         .expireAfterWrite(1, TimeUnit.MINUTES)
         .build(CacheLoader.from { key ->
@@ -486,8 +486,17 @@ open class WeatherBot(val telegramBot: AbsSender) {
                         }
                 }
             }
-            processWarnings(false)
-            processWarnings(true)
+            try {
+                processWarnings(false)
+            } catch (e: Exception) {
+                log.warn("Unable to fetch chinese warnings", e)
+            }
+            try {
+                processWarnings(true)
+            } catch (e: Exception) {
+                log.warn("Unable to fetch english warnings", e)
+            }
+
         }
     }
 
@@ -820,7 +829,7 @@ open class WeatherBot(val telegramBot: AbsSender) {
 
 class UpdateHandler(private val sender: AbsSender, private val bot: WeatherBot) {
 
-    private val log: Logger = LoggerFactory.getLogger(javaClass)
+    private val log = LoggerFactory.getLogger(javaClass)
 
     fun handle(update: Update?) {
         if (update == null || !(update.hasInlineQuery() || update.hasMessage() || update.hasCallbackQuery())) return

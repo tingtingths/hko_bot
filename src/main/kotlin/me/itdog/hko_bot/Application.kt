@@ -64,7 +64,7 @@ class Application(args: Array<String>) {
     private var webhookPath: String
     private var port: Int
     private var httpThread: Int
-    private val logger = LoggerFactory.getLogger("")
+    private val log = LoggerFactory.getLogger("")
     private var broadcastMessage: String? = null
 
     init {
@@ -284,13 +284,13 @@ class Application(args: Array<String>) {
                 setWebhook
             )
 
-            logger.info("Webhook url = $webhookBaseURL/callback/$webhookPath")
+            log.info("Webhook url = $webhookBaseURL/callback/$webhookPath")
         } else {
             val botApi = TelegramBotsApi(DefaultBotSession::class.java)
             builder.updateType(WeatherBotBuilder.UpdateType.LONG_POLL)
             botApi.registerBot(builder.build() as LongPollingBot)
         }
 
-        logger.info("Bot Started...")
+        log.info("Bot Started...")
     }
 }

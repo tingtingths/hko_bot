@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import redis.clients.jedis.Jedis
 import redis.clients.jedis.JedisPool
@@ -49,7 +48,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
     ApplicationSettingsPersistent {
 
     private val gson = Gson()
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private enum class CacheKeyPrefix(val prefix: String) {
         CHAT("hko_bot_chat_settings_"),
@@ -68,7 +67,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
         var value: String?
         with(borrowConnection()) {
             value = get(key)
-            logger.debug("GET $key=$value")
+            log.debug("GET $key=$value")
             this
         }.let { returnConnection(it) }
         return value
@@ -76,7 +75,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
 
     override fun set(key: String, value: String) {
         with(borrowConnection()) {
-            logger.debug("SET $key=$value")
+            log.debug("SET $key=$value")
             set(key, value)
             this
         }.let { returnConnection(it) }
@@ -84,7 +83,7 @@ class RedisPersistent(private val jedisPool: JedisPool) : KeyValuePersistent<Str
 
     override fun del(key: String) {
         with(borrowConnection()) {
-            logger.debug("DEL $key")
+            log.debug("DEL $key")
             del(key)
             this
         }.let { returnConnection(it) }
@@ -172,7 +171,7 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, J
     ApplicationSettingsPersistent {
 
     private val gson = Gson()
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+    private val log = LoggerFactory.getLogger(javaClass)
     private var outstandingChanges: AtomicInteger = AtomicInteger(0)
     private var lastWrite = Instant.now()
 
@@ -202,7 +201,7 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, J
                     JsonObject()
                 }
             } catch (e: Exception) {
-                logger.warn("Unable to parse persistent file ${file.path}, back up current file...")
+                log.warn("Unable to parse persistent file ${file.path}, back up current file...")
                 file.copyTo(
                     File(file.parent, "${file.name}.${System.currentTimeMillis()}")
                 )
@@ -225,19 +224,19 @@ class LocalFilePersistent(private val file: File) : KeyValuePersistent<String, J
 
     override fun get(key: String): JsonElement? {
         val value = image.get(key) ?: null
-        logger.debug("GET $key=$value")
+        log.debug("GET $key=$value")
         return value
     }
 
     override fun set(key: String, value: JsonElement) {
-        logger.debug("SET $key=$value")
+        log.debug("SET $key=$value")
         image.add(key, value)
         outstandingChanges.incrementAndGet()
         write()
     }
 
     override fun del(key: String) {
-        logger.debug("DEL $key")
+        log.debug("DEL $key")
         image.remove(key)
         outstandingChanges.incrementAndGet()
         write()
